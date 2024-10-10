@@ -1,6 +1,7 @@
 mod encoding;
 mod matrix;
 mod output;
+
 use rocket::{get, routes};
 
 #[get("/")]
