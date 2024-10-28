@@ -9,7 +9,7 @@ use shuttle_runtime::SecretStore;
 
 #[derive(Clone)]
 pub struct Environments {
-    pub env: SecretStore
+    pub env: SecretStore,
 }
 
 impl Environments {

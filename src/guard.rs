@@ -1,15 +1,16 @@
 use crate::utils::decode_jwt;
+use crate::utils::Environments;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
+use rocket::State;
 use serde::Deserialize;
 use shuttle_runtime::{SecretStore, Secrets};
-use rocket::State;
-use crate::utils::Environments;
 
 #[derive(Deserialize)]
 pub struct Claims {
     pub sub: String,
     pub exp: usize,
+    pub permissions: Vec<String>,
 }
 
 pub struct AuthGuard(pub Claims);

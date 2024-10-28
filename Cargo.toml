@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rocket = "0.5.1"
+rocket = { version = "0.5.1", features = ["json"] }
 shuttle-rocket = "0.48.0"
 shuttle-runtime = "0.48.0"
 tokio = "1.26.0"
@@ -14,3 +14,4 @@ serde = {version = "1.0", features = ["derive"]}
 rocket_cors = "0.6.0"
 reqwest = {version = "0.12.8", features = ["json"]}
 base64 = "0.22.1"
+serde_json = "1.0.132"
