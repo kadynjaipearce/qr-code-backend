@@ -13,10 +13,10 @@ pub struct Claims {
     pub permissions: Vec<String>,
 }
 
-pub struct AuthGuard(pub Claims);
+// pub struct AuthGuard(pub Claims);
 
 #[rocket::async_trait]
-impl<'r> FromRequest<'r> for AuthGuard {
+impl<'r> FromRequest<'r> for Claims {
     type Error = ();
 
     async fn from_request(request: &'r rocket::Request<'_>) -> Outcome<Self, Self::Error> {
@@ -28,7 +28,7 @@ impl<'r> FromRequest<'r> for AuthGuard {
             let token_str = bearer_token.trim_start_matches("Bearer ").trim();
 
             match decode_jwt(token_str, secrets.inner()).await {
-                Ok(claims) => Outcome::Success(AuthGuard(claims)),
+                Ok(claims) => Outcome::Success(claims),
                 Err(_) => Outcome::Error((Status::Unauthorized, ())),
             }
         } else {

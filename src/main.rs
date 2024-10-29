@@ -5,7 +5,7 @@ mod output;
 mod tests;
 mod utils;
 
-use guard::AuthGuard;
+use guard::{Claims};
 use rocket::{get, http::Status, routes};
 use rocket_cors::{AllowedOrigins, CorsOptions};
 use shuttle_runtime::SecretStore;
@@ -29,12 +29,12 @@ fn index() -> &'static str {
 }
 
 #[get("/test_auth")]
-fn test_auth(token: AuthGuard) -> Result<(Status, Json<MyResponse>), (Status, Json<ErrorResponse>)> {
+fn test_auth(token: Claims) -> Result<(Status, Json<MyResponse>), (Status, Json<ErrorResponse>)> {
     let required_perms = vec!["read:all".to_string(), "write:all".to_string()];
-    let perms = token.0.permissions.join(" ");
+    let perms = token.permissions.join(" ");
 
     // Check if all required permissions are present
-    if required_perms.iter().all(|perm| token.0.permissions.contains(perm)) {
+    if required_perms.iter().all(|perm| token.permissions.contains(perm)) {
         let response = MyResponse {
             message: "Authorization successful".to_string(),
             data: Some(perms), // Include user permissions
