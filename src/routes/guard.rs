@@ -1,10 +1,10 @@
 use crate::utils::decode_jwt;
 use crate::utils::Environments;
+
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::State;
 use serde::Deserialize;
-use shuttle_runtime::{SecretStore, Secrets};
 
 #[derive(Deserialize)]
 pub struct Claims {
@@ -12,8 +12,6 @@ pub struct Claims {
     pub exp: usize,
     pub permissions: Vec<String>,
 }
-
-// pub struct AuthGuard(pub Claims);
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for Claims {
@@ -34,5 +32,13 @@ impl<'r> FromRequest<'r> for Claims {
         } else {
             Outcome::Error((Status::Unauthorized, ()))
         }
+    }
+}
+
+impl Claims {
+    pub fn has_permissions(&self, required_perms: &[&str]) -> bool {
+        required_perms
+            .iter()
+            .all(|perm| self.permissions.contains(&perm.to_string()))
     }
 }
