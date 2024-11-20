@@ -20,7 +20,7 @@ pub struct ApiResponse<T> {
 }
 
 pub struct Database {
-    pub db: Surreal<Client>,
+    db: Surreal<Client>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -39,14 +39,20 @@ impl Database {
         .await?;
         db.use_ns("ns").use_db("db").await?;
 
+        db.query("
+        DEFINE TABLE user SCHEMAFULL;
+        DEFINE FIELD id ON user TYPE string ASSERT $value != NONE;
+        DEFINE FIELD email ON user TYPE string ASSERT $value != NONE;
+        ").await?;
+
         Ok(Database { db })
     }
 
     pub async fn insert_user(&self, user: models::User) -> Response<models::User> {
         let mut result = self
             .db
-            .query("CREATE user SET id = $id, email = $email")
-            .bind(("id", user.auth0_id))
+            .query("CREATE type::thing('user', $id) SET id = $auth0_id, email = $email")
+            .bind(("auth0_id", user.auth0_id))
             .bind(("email", user.email))
             .await?;
 
@@ -65,9 +71,14 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn view_users(&self) -> Response<Vec<models::UserResult>> {
-        let result: Vec<models::UserResult> = self.db.select("user").await?;
+    pub async fn validate_user(&self, email: String) -> Response<bool> {
+        let exists: Option<models::UserResult> = self
+            .db
+            .query("SELECT * FROM user WHERE email = $email")
+            .bind(("email", email))
+            .await?
+            .take(0)?;
 
-        Ok(result)
+        Ok(exists.is_some())
     }
 }

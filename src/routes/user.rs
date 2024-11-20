@@ -8,7 +8,7 @@ use rocket::{get, post};
 use serde_json::json;
 
 #[post("/create_user", format = "json", data = "<user>")]
-pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) -> Response<Value> {
+pub async fn create_user(db: &State<Database>, user: Json<User>) -> Response<Value> {
     let auth0_id = user.auth0_id.clone();
 
     match db.select_user(auth0_id).await? {
@@ -30,9 +30,9 @@ pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) 
     }
 }
 
-#[get("/view_users")]
-pub async fn view_users(token: Claims, db: &State<Database>) -> Response<Value> {
-    let users = db.view_users().await?;
+#[get("/validate")]
+pub async fn validate_user(db: &State<Database>) -> Response<Value> {
+    let users = db.validate_user("enxrm@gmail.com".to_string()).await?;
 
     Ok(json!({"users": users}))
 }
