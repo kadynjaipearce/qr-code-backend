@@ -43,28 +43,29 @@ impl Database {
         DEFINE TABLE user SCHEMAFULL;
         DEFINE FIELD id ON user TYPE string ASSERT $value != NONE;
         DEFINE FIELD email ON user TYPE string ASSERT $value != NONE;
+        DEFINE FIELD created_at ON user TYPE datetime ASSERT $value != NONE;
         ").await?;
 
         Ok(Database { db })
     }
 
-    pub async fn insert_user(&self, user: models::User) -> Response<models::User> {
+    pub async fn insert_user(&self, user: models::User) -> Response<models::UserResult> {
         let mut result = self
             .db
-            .query("CREATE type::thing('user', $id) SET id = $auth0_id, email = $email")
-            .bind(("auth0_id", user.auth0_id))
+            .query("CREATE type::thing('user', $id) SET email = $email, created_at = time::now();")
+            .bind(("id", user.id))
             .bind(("email", user.email))
             .await?;
 
-        let created: Option<models::User> = result.take(0)?;
+        let created: Option<models::UserResult> = result.take(0)?;
         Ok(created.unwrap())
     }
 
-    pub async fn select_user(&self, auth0_id: String) -> Response<Option<models::User>> {
-        let result: Option<models::User> = self
+    pub async fn select_user(&self, id: String) -> Response<Option<models::UserResult>> {
+        let result: Option<models::UserResult> = self
             .db
-            .query("SELECT * FROM users WHERE id = $id")
-            .bind(("id", auth0_id))
+            .query("SELECT * FROM type::thing('user', $id);")
+            .bind(("id", id))
             .await?
             .take(0)?;
 

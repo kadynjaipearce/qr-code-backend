@@ -31,7 +31,8 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
                 index,
                 routes::user::test_auth,
                 routes::user::create_user,
-                routes::user::validate_user
+                routes::user::validate_user,
+                routes::user::find_user
             ],
         )
         .attach(cors)

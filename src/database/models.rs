@@ -2,19 +2,19 @@ use core::fmt;
 use std::fmt::write;
 
 use serde::{Deserialize, Serialize};
-use surrealdb::{sql::Thing, Response};
+use surrealdb::{sql::Thing, sql::Datetime, Response};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
-    #[serde(rename = "id")]
-    pub auth0_id: String,
+    pub id: String,
     pub email: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserResult {
     id: Thing,
-    email: String,
+    pub email: String,
+    created_at: Datetime
 }
 
 impl TryFrom<UserResult> for User {
@@ -22,7 +22,7 @@ impl TryFrom<UserResult> for User {
 
     fn try_from(value: UserResult) -> Result<Self, Self::Error> {
         let user = User {
-            auth0_id: value.id.to_raw(),
+            id: value.id.to_raw(),
             email: value.email,
         };
 
@@ -35,7 +35,7 @@ impl fmt::Display for User {
         write!(
             f,
             "User {{ auth0_id: {}, email: {} }}",
-            self.auth0_id, self.email
+            self.id, self.email
         )
     }
 }
