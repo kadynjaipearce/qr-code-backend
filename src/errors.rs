@@ -1,9 +1,7 @@
 use core::fmt;
 
 use rocket::{
-    fairing::{Fairing, Info, Kind},
     http::Status,
-    request,
     response::{status, Responder},
     serde::json::Json,
 };
