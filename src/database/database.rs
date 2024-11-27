@@ -1,14 +1,15 @@
-use surrealdb::engine::remote::ws::{Client, Wss};
-use surrealdb::opt::auth::Root;
-use surrealdb::Surreal;
-
 use crate::database::models;
 use crate::errors::Response;
 use crate::utils::Environments;
 
+use surrealdb::engine::remote::ws::{Client, Wss};
+use surrealdb::opt::auth::Root;
+use surrealdb::Surreal;
+
+use super::models::DynamicUrl;
 
 pub struct Database {
-    db: Surreal<Client> //  Holds a private instance of the SurrealDB connection to restrict query access.
+    db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
 }
 
 impl Database {
@@ -63,7 +64,6 @@ impl Database {
         Ok(Database { db })
     }
 
-    
     pub async fn insert_user(&self, user: models::User) -> Response<models::UserResult> {
         /*
             Inserts a new user into the database after Auth0 post-registration.
@@ -90,11 +90,11 @@ impl Database {
 
     pub async fn select_user(&self, id: String) -> Response<Option<models::UserResult>> {
         /*
-            Selects a user from the database with a id.
+           Selects a user from the database with a id.
 
-            Params:
-                
-         */
+           Params:
+
+        */
         let result: Option<models::UserResult> = self
             .db
             .query("SELECT * FROM type::thing('user', $id);")
@@ -105,16 +105,22 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn validate_user(&self, email: String) -> Response<bool> {
-        let exists: Option<models::UserResult> = self
-            .db
-            .query("SELECT * FROM user WHERE email = $email")
-            .bind(("email", email))
-            .await?
-            .take(0)?;
-
-        Ok(exists.is_some())
-    }
-
     // todo: implement dynamic_url database interactions.
+
+    pub async fn insert_dynamic_url(
+        &self,
+        dynamic_url: DynamicUrl,
+    ) -> Response<models::DynamicUrlResult> {
+        let mut result = self.db.query("
+        CREATE type::thing('dynamic_url', uuid()) 
+        SET server_url = $server_url, 
+        target_url = $target_url, 
+        created_at = time::now(), updated_at = time::now()")
+        .bind(("server_url", dynamic_url.server_url))
+        .bind(("target_url", dynamic_url.target_url))
+        .await?;
+        
+        let created: Option<models::DynamicUrlResult> = result.take(0)?;
+        Ok(created.unwrap())
+    }
 }

@@ -1,10 +1,9 @@
 use crate::errors::{ApiError, Response};
 use crate::routes::guard::Claims;
+
 use base64::{engine::general_purpose, Engine};
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, TokenData, Validation};
 use reqwest;
-use rocket::http::Status;
-use rocket::request::{FromRequest, Outcome};
 use serde::Deserialize;
 use shuttle_runtime::SecretStore;
 
@@ -21,13 +20,6 @@ impl Environments {
     pub fn get(&self, key: &str) -> String {
         self.env.get(key).unwrap()
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub enum AuthErrors {
-    Missing,
-    Invalid,
-    Unauthorized,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -100,7 +92,7 @@ pub async fn decode_jwt(token: &str, secrets: &Environments) -> Response<Claims>
 
     let jwk = fetch_jwk(&kid, &secrets).await.map_err(|err| {
         eprint!("Error Fetching: {:?}", err);
-        AuthErrors::Invalid
+        ApiError::Unauthorized
     });
 
     let a = &jwk.unwrap();

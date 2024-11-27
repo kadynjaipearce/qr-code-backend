@@ -2,6 +2,7 @@ use crate::database::database::Database;
 use crate::database::models::User;
 use crate::errors::{ApiError, Response};
 use crate::routes::guard::Claims;
+
 use rocket::serde::{json::Json, json::Value};
 use rocket::State;
 use rocket::{get, post};
@@ -9,8 +10,7 @@ use serde_json::json;
 
 #[post("/create_user", format = "json", data = "<user>")]
 pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) -> Response<Value> {
-    let auth0_id = user.id.clone();
-    let claim_id = token.sub;
+    // todo: check if token sub matches user.id.
 
     match db.insert_user(user.into_inner()).await {
         Ok(user) => Ok(json!({"data": user})),
@@ -23,7 +23,7 @@ pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) 
     }
 }
 
-
+// test if authentication is working.
 #[get("/test_auth")]
 pub fn test_auth(token: Claims) -> Response<Value> {
     if !token.has_permissions(&["read:all", "write:all"]) {
