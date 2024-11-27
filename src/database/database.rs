@@ -109,6 +109,7 @@ impl Database {
 
     pub async fn insert_dynamic_url(
         &self,
+        user_id: String,
         dynamic_url: DynamicUrl,
     ) -> Response<models::DynamicUrlResult> {
         let mut result = self.db.query("
