@@ -27,7 +27,13 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
     let rocket = rocket::build()
         .mount(
             "/",
-            routes![index, routes::user::test_auth, routes::user::create_user],
+            routes![
+                index,
+                routes::user::test_auth,
+                routes::user::create_user,
+                routes::qrcode::create_dynamic_qrcode,
+                routes::qrcode::scan
+            ],
         )
         .attach(cors)
         .manage(env)

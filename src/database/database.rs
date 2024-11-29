@@ -1,12 +1,13 @@
 use crate::database::models;
 use crate::errors::Response;
 use crate::utils::Environments;
+use rocket::serde::json::Json;
 
 use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
-use super::models::DynamicUrl;
+use super::models::{DynamicUrl, LinkResult};
 
 pub struct Database {
     db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
@@ -112,16 +113,32 @@ impl Database {
         user_id: String,
         dynamic_url: DynamicUrl,
     ) -> Response<models::DynamicUrlResult> {
-        let mut result = self.db.query("
+        let mut result = self
+            .db
+            .query(
+                "
         CREATE type::thing('dynamic_url', uuid()) 
         SET server_url = $server_url, 
         target_url = $target_url, 
-        created_at = time::now(), updated_at = time::now()")
-        .bind(("server_url", dynamic_url.server_url))
-        .bind(("target_url", dynamic_url.target_url))
-        .await?;
-        
+        created_at = time::now(), updated_at = time::now()",
+            )
+            .bind(("server_url", dynamic_url.server_url))
+            .bind(("target_url", dynamic_url.target_url))
+            .await?;
+
         let created: Option<models::DynamicUrlResult> = result.take(0)?;
         Ok(created.unwrap())
+    }
+
+    pub async fn lookup_dynamic_url(&self, server_url: String) -> Response<String> {
+        let mut result = self
+            .db
+            .query("SELECT target_url FROM dynamic_url WHERE server_url = $server_url")
+            .bind(("server_url", server_url))
+            .await?;
+
+        let created: Option<models::LinkResult> = result.take(0)?;
+
+        Ok(created.unwrap().target_url)
     }
 }

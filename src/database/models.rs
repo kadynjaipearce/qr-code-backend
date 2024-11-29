@@ -30,6 +30,11 @@ pub struct DynamicUrlResult {
     updated_at: Datetime,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LinkResult {
+    pub target_url: String,
+}
+
 impl fmt::Display for User {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "User {{ id: {}, email: {} }}", self.id, self.email)
