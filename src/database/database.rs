@@ -1,4 +1,4 @@
-use crate::database::models;
+use crate::database::models::{self, format_user_id};
 use crate::errors::Response;
 use crate::utils::Environments;
 use rocket::serde::json::Json;
@@ -81,7 +81,7 @@ impl Database {
         let mut result = self
             .db
             .query("CREATE type::thing('user', $id) SET email = $email, created_at = time::now();")
-            .bind(("id", user.id))
+            .bind(("id", format_user_id(user.id)))
             .bind(("email", user.email))
             .await?;
 
@@ -89,7 +89,7 @@ impl Database {
         Ok(created.unwrap())
     }
 
-    pub async fn select_user(&self, id: String) -> Response<Option<models::UserResult>> {
+    pub async fn select_user(&self, id: &str) -> Response<Option<models::UserResult>> {
         /*
            Selects a user from the database with a id.
 
@@ -99,7 +99,7 @@ impl Database {
         let result: Option<models::UserResult> = self
             .db
             .query("SELECT * FROM type::thing('user', $id);")
-            .bind(("id", id))
+            .bind(("id", id.to_string()))
             .await?
             .take(0)?;
 
@@ -110,35 +110,55 @@ impl Database {
 
     pub async fn insert_dynamic_url(
         &self,
-        user_id: String,
+        user_id: &str,
         dynamic_url: DynamicUrl,
     ) -> Response<models::DynamicUrlResult> {
+        // todo: relate user to their created dynamic urls.
+
         let mut result = self
             .db
             .query(
                 "
-        CREATE type::thing('dynamic_url', uuid()) 
+        RELATE type::record($record, 'user')->created->CREATE type::thing('dynamic_url', uuid()) 
         SET server_url = $server_url, 
         target_url = $target_url, 
         created_at = time::now(), updated_at = time::now()",
             )
+            .bind(("record", format!("user:{}", format_user_id(user_id.to_string()))))
             .bind(("server_url", dynamic_url.server_url))
             .bind(("target_url", dynamic_url.target_url))
             .await?;
+
+        // todo: relate user to created url & implement transactions for error handling.
+
+        /*
+            RELATE user:p976h8n57rv5->created->CREATE type::thing("dynamic_url", "skibidsi") SET server_url = "0m94z643x3", target_url = "kadynpearce.dev", created_at = time::now(), updated_at = time::now()
+         */
 
         let created: Option<models::DynamicUrlResult> = result.take(0)?;
         Ok(created.unwrap())
     }
 
-    pub async fn lookup_dynamic_url(&self, server_url: String) -> Response<String> {
+    pub async fn lookup_dynamic_url(&self, server_url: &str) -> Response<String> {
         let mut result = self
             .db
             .query("SELECT target_url FROM dynamic_url WHERE server_url = $server_url")
-            .bind(("server_url", server_url))
+            .bind(("server_url", server_url.to_string()))
             .await?;
 
         let created: Option<models::LinkResult> = result.take(0)?;
 
         Ok(created.unwrap().target_url)
+    }
+    
+    // todo: create fn to fetch all users created urls raw or formatted.
+    pub async fn list_user_urls(&self, user_id: &str) -> Response<Vec<models::DynamicUrlResult>> {
+        let mut result = self.db.query("SELECT * FROM type::record($record, 'user')->created->dynamic_url")
+            .bind(("record", format!("user:{}", user_id.to_string())))
+            .await?;
+        
+        let arr: Vec<models::DynamicUrlResult> = result.take(0)?;
+        // SELECT * FROM user:p976h8n57rv5->created->dynamic_url
+        Ok(arr)
     }
 }
