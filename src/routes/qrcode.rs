@@ -51,5 +51,22 @@ pub async fn list_users_dynamic_qrcodes(token: Claims, db: &State<Database>) -> 
     Ok(json!({"dynamic_urls": urls}))
 }
 
+#[post("/update_dynamic_qrcode", format = "json", data = "<qrcode>")]
+pub async fn update_dynamic_qrcode(
+    token: Claims,
+    db: &State<Database>,
+    qrcode: Json<models::DynamicUrl>,
+) -> Response<Value> {
+    if !token.has_permissions(&["write:dynamicqr"]) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let url = db
+        .update_dynamic_url(&qrcode.server_url, &qrcode.target_url)
+        .await?;
+
+    Ok(json!({"updated": url}))
+}
+
 
 // todo: create front-end route to fetch users created qr codes and format for easy rendering.

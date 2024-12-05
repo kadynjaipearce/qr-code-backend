@@ -1,5 +1,5 @@
 use crate::database::models::{self, format_user_id};
-use crate::errors::Response;
+use crate::errors::{ApiError, Response};
 use crate::utils::Environments;
 use rocket::serde::json::Json;
 
@@ -146,9 +146,10 @@ impl Database {
             .bind(("server_url", server_url.to_string()))
             .await?;
 
-        let created: Option<models::LinkResult> = result.take(0)?;
-
-        Ok(created.unwrap().target_url)
+        match result.take::<Option<models::LinkResult>>(0)?  {
+            Some(created) => Ok(created.target_url),
+            None => Err(ApiError::InternalServerError("No matching URL found.".to_string()))
+        }
     }
     
     // todo: create fn to fetch all users created urls raw or formatted.
@@ -161,4 +162,20 @@ impl Database {
         // SELECT * FROM user:p976h8n57rv5->created->dynamic_url
         Ok(arr)
     }
+
+    pub async fn update_dynamic_url(&self, server_url: &str, new_target_url: &str) -> Response<models::DynamicUrlResult> {
+        let mut result = self
+            .db
+            .query("UPDATE dynamic_url SET target_url = $target_url, updated_at = time::now() WHERE server_url = $server_url")
+            .bind(("server_url", server_url.to_string()))
+            .bind(("target_url", new_target_url.to_string()))
+            .await?;
+
+        match result.take::<Option<models::DynamicUrlResult>>(0)? {
+            Some(updated) => Ok(updated),
+            None => Err(ApiError::InternalServerError("No matching URL found.".to_string()))
+        }
+    }
+
+   
 }

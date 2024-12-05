@@ -23,7 +23,7 @@ pub struct DynamicUrl {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DynamicUrlResult {
-    id: String,
+    id: Thing,
     server_url: String,
     target_url: String,
     created_at: Datetime,

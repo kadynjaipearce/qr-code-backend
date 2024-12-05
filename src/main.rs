@@ -33,7 +33,8 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
                 routes::user::create_user,
                 routes::qrcode::create_dynamic_qrcode,
                 routes::qrcode::scan,
-                routes::qrcode::list_users_dynamic_qrcodes
+                routes::qrcode::list_users_dynamic_qrcodes,
+                routes::qrcode::update_dynamic_qrcode,
             ],
         )
         .attach(cors)
