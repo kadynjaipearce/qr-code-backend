@@ -1,13 +1,10 @@
 use crate::database::models::{self, format_user_id};
 use crate::errors::{ApiError, Response};
 use crate::utils::Environments;
-use rocket::serde::json::Json;
 
 use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
-
-use super::models::{DynamicUrl, LinkResult};
 
 pub struct Database {
     db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
@@ -65,6 +62,35 @@ impl Database {
         Ok(Database { db })
     }
 
+    pub async fn list_user_urls(&self, user_id: &str) -> Response<Vec<models::DynamicUrlResult>> {
+        /*
+           Lists all dynamic URLs created by a user.
+
+           Params:
+               user_id (string): The user's Auth0 ID.
+
+           Returns:
+               Response<Vec<models::DynamicUrlResult>>: A list of dynamic URLs created by the user.
+
+        */
+
+        let mut result = self
+            .db
+            .query("RETURN SELECT * FROM type::record($record, 'user')->created->dynamic_url")
+            .bind(("record", format!("user:{}", user_id.to_string())))
+            .await?;
+
+        let created = result.take::<Vec<models::DynamicUrlResult>>(0)?;
+
+        if created.is_empty() {
+            Err(ApiError::InternalServerError(
+                "User has no dynamic urls.".to_string(),
+            ))
+        } else {
+            Ok(created)
+        }
+    }
+
     pub async fn insert_user(&self, user: models::User) -> Response<models::UserResult> {
         /*
             Inserts a new user into the database after Auth0 post-registration.
@@ -85,8 +111,12 @@ impl Database {
             .bind(("email", user.email))
             .await?;
 
-        let created: Option<models::UserResult> = result.take(0)?;
-        Ok(created.unwrap())
+        match result.take::<Option<models::UserResult>>(0)? {
+            Some(created) => Ok(created),
+            None => Err(ApiError::InternalServerError(
+                "Failed to create user.".to_string(),
+            )),
+        }
     }
 
     pub async fn select_user(&self, id: &str) -> Response<Option<models::UserResult>> {
@@ -94,26 +124,42 @@ impl Database {
            Selects a user from the database with a id.
 
            Params:
+               id (string): The user's Auth0 ID.
 
         */
-        let result: Option<models::UserResult> = self
+
+        let mut result = self
             .db
             .query("SELECT * FROM type::thing('user', $id);")
             .bind(("id", id.to_string()))
-            .await?
-            .take(0)?;
+            .await?;
 
-        Ok(result)
+        match result.take::<Option<models::UserResult>>(0)? {
+            Some(user) => Ok(Some(user)),
+            None => Ok(None),
+        }
     }
 
-    // todo: implement dynamic_url database interactions.
+    // Dynamic URL CRUD operations.
 
     pub async fn insert_dynamic_url(
         &self,
         user_id: &str,
-        dynamic_url: DynamicUrl,
+        dynamic_url: models::DynamicUrl,
     ) -> Response<models::DynamicUrlResult> {
-        // todo: relate user to their created dynamic urls.
+        /*
+           Inserts a new dynamic URL into the database.
+
+           Params:
+               user_id (string): The user's Auth0 ID.
+               dynamic_url (models::DynamicUrl): Contains:
+                   - `server_url`: The server URL that will be shortened.
+                   - `target_url`: The original destination URL that the dynamic URL points to.
+
+           Returns:
+               Response<models::DynamicUrlResult>: The inserted dynamic URL object, including any generated fields like `created_at`.
+
+        */
 
         let mut result = self
             .db
@@ -124,46 +170,65 @@ impl Database {
         target_url = $target_url, 
         created_at = time::now(), updated_at = time::now()",
             )
-            .bind(("record", format!("user:{}", format_user_id(user_id.to_string()))))
+            .bind((
+                "record",
+                format!("user:{}", format_user_id(user_id.to_string())),
+            ))
             .bind(("server_url", dynamic_url.server_url))
             .bind(("target_url", dynamic_url.target_url))
             .await?;
 
-        // todo: relate user to created url & implement transactions for error handling.
-
-        /*
-            RELATE user:p976h8n57rv5->created->CREATE type::thing("dynamic_url", "skibidsi") SET server_url = "0m94z643x3", target_url = "kadynpearce.dev", created_at = time::now(), updated_at = time::now()
-         */
-
-        let created: Option<models::DynamicUrlResult> = result.take(0)?;
-        Ok(created.unwrap())
+        match result.take::<Option<models::DynamicUrlResult>>(0)? {
+            Some(created) => Ok(created),
+            None => Err(ApiError::InternalServerError(
+                "Failed to create dynamic URL.".to_string(),
+            )),
+        }
     }
 
     pub async fn lookup_dynamic_url(&self, server_url: &str) -> Response<String> {
+        /*
+           Looks up a dynamic URL in the database and returns the target URL.
+
+           Params:
+               server_url (string): The server URL to look up.
+
+           Returns:
+               Response<String>: The target URL that the server URL points to.
+
+        */
+
         let mut result = self
             .db
             .query("SELECT target_url FROM dynamic_url WHERE server_url = $server_url")
             .bind(("server_url", server_url.to_string()))
             .await?;
 
-        match result.take::<Option<models::LinkResult>>(0)?  {
+        match result.take::<Option<models::LinkResult>>(0)? {
             Some(created) => Ok(created.target_url),
-            None => Err(ApiError::InternalServerError("No matching URL found.".to_string()))
+            None => Err(ApiError::InternalServerError(
+                "Url doesn't exist.".to_string(),
+            )),
         }
     }
-    
-    // todo: create fn to fetch all users created urls raw or formatted.
-    pub async fn list_user_urls(&self, user_id: &str) -> Response<Vec<models::DynamicUrlResult>> {
-        let mut result = self.db.query("SELECT * FROM type::record($record, 'user')->created->dynamic_url")
-            .bind(("record", format!("user:{}", user_id.to_string())))
-            .await?;
-        
-        let arr: Vec<models::DynamicUrlResult> = result.take(0)?;
-        // SELECT * FROM user:p976h8n57rv5->created->dynamic_url
-        Ok(arr)
-    }
 
-    pub async fn update_dynamic_url(&self, server_url: &str, new_target_url: &str) -> Response<models::DynamicUrlResult> {
+    pub async fn update_dynamic_url(
+        &self,
+        server_url: &str,
+        new_target_url: &str,
+    ) -> Response<models::DynamicUrlResult> {
+        /*
+             Updates the target URL of a dynamic URL in the database.
+
+             Params:
+               server_url (string): The server URL to update.
+               new_target_url (string): The new target URL to set.
+
+             Returns:
+               Response<models::DynamicUrlResult>: The updated dynamic URL object, including any generated fields like `updated_at`.
+
+        */
+
         let mut result = self
             .db
             .query("UPDATE dynamic_url SET target_url = $target_url, updated_at = time::now() WHERE server_url = $server_url")
@@ -173,9 +238,32 @@ impl Database {
 
         match result.take::<Option<models::DynamicUrlResult>>(0)? {
             Some(updated) => Ok(updated),
-            None => Err(ApiError::InternalServerError("No matching URL found.".to_string()))
+            None => Err(ApiError::InternalServerError(
+                "No matching URL found.".to_string(),
+            )),
         }
     }
 
-   
+    pub async fn delete_dynamic_url(&self, id: &str) -> Response<()> {
+        /*
+            Deletes a dynamic URL from the database.
+
+            Params:
+                id (string): The ID of the dynamic URL to delete.
+
+        */
+
+        let mut result = self
+            .db
+            .query("DELETE dynamic_url WHERE id = $id")
+            .bind(("id", id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::DynamicUrlResult>>(0)? {
+            Some(_) => Ok(()),
+            None => Err(ApiError::InternalServerError(
+                "Failed to delete url.".to_string(),
+            )),
+        }
+    }
 }

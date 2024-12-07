@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::utils::{cleanse_jwk, decode_jwt, pad_base64_url}; // Ensure correct module path
     use crate::database::models::format_user_id;
+    use crate::utils::{cleanse_jwk, decode_jwt, pad_base64_url}; // Ensure correct module path
     #[test]
     fn test_pad_base_url() {
         // Test case for one extra padding
@@ -19,6 +19,9 @@ mod tests {
 
     #[test]
     fn test_format_user_id() {
-        assert_eq!(format_user_id("google-oauth2|103365148753481340229".to_string()), "google_oauth2_103365148753481340229")
+        assert_eq!(
+            format_user_id("google-oauth2|103365148753481340229".to_string()),
+            "google_oauth2_103365148753481340229"
+        )
     }
 }

@@ -1,6 +1,9 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
-use surrealdb::{sql::Datetime, sql::Thing};
+use surrealdb::{
+    sql::{Datetime, Thing},
+    RecordId,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
