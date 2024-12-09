@@ -11,6 +11,17 @@ use serde_json::json;
 
 #[get("/scan/<server_url>")]
 pub async fn scan(db: &State<Database>, server_url: &str) -> Response<Redirect> {
+    /*
+        Redirects to the target URL of a dynamic QR code.
+
+        Params:
+            server_url (str): The server URL of the dynamic QR code.
+
+        Returns:
+            Response<Redirect>: Redirects to the target URL.
+    
+     */
+    
     let url = db.lookup_dynamic_url(&server_url.to_string()).await?;
 
     if url.contains("Https://") || url.contains("http://") {
@@ -30,13 +41,29 @@ pub async fn create_dynamic_qrcode(
         return Err(ApiError::Unauthorized);
     }
 
-    // todo: check if target_url already exists in one of users links.
-
     let url = db
         .insert_dynamic_url(&token.sub, qrcode.into_inner())
         .await?;
 
     Ok(json!({"dynamic_url": url}))
+}
+
+#[get("/read_dynamic_qrcode")]
+pub async fn read_dynamic_qrcode(token: Claims, db: &State<Database>) -> Response<Value> {
+    if !token.has_permissions(&["read:dynamicqr"]) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let urls = db
+        .list_user_urls(format_user_id(token.sub).as_str())
+        .await?;
+
+    // get users sub err: unauthed, does'nt exist (auto)
+    // get qr codes related to user :err: non exist
+    // format to Json response
+    // return
+
+    Ok(json!({"dynamic_urls": urls}))
 }
 
 #[post("/update_dynamic_qrcode", format = "json", data = "<qrcode>")]
@@ -55,3 +82,5 @@ pub async fn update_dynamic_qrcode(
 
     Ok(json!({"updated": url}))
 }
+
+

@@ -45,5 +45,6 @@ impl fmt::Display for User {
 }
 
 pub fn format_user_id(auth0_id: String) -> String {
-    auth0_id.replace(&['|', '-'], "_") // removes the | encoded in auth_ids e.g. auth_0|id becomes auth_0_id
+    // removes the | encoded in auth_ids e.g. auth_0|id becomes auth_0_id
+    auth0_id.replace(&['|', '-'], "_") 
 }

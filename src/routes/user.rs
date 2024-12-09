@@ -10,7 +10,22 @@ use serde_json::json;
 
 #[post("/create_user", format = "json", data = "<user>")]
 pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) -> Response<Value> {
-    if token.sub != user.id {
+    /*
+           Lists all dynamic URLs created by a user.
+
+           only to be called by auth0 action after Auth0 post-registration.
+
+           Params:
+               user: user object containing the user's Auth0 ID and email.
+
+           Returns:
+               Response<Value>: the created user object as a json response.
+
+    */
+
+    let user_token = format_user_id(token.sub.clone());
+
+    if user_token != user.id {
         return Err(ApiError::Unauthorized);
     }
 
@@ -20,23 +35,8 @@ pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) 
     }
 }
 
-#[get("/list_users_dynamic_qrcodes")]
-pub async fn list_users_dynamic_qrcodes(token: Claims, db: &State<Database>) -> Response<Value> {
-    if !token.has_permissions(&["read:dynamicqr"]) {
-        return Err(ApiError::Unauthorized);
-    }
 
-    let urls = db
-        .list_user_urls(format_user_id(token.sub).as_str())
-        .await?;
 
-    // get users sub err: unauthed, does'nt exist (auto)
-    // get qr codes related to user :err: non exist
-    // format to Json response
-    // return
-
-    Ok(json!({"dynamic_urls": urls}))
-}
 
 #[post("/cancel_subscription", format = "json", data = "<sub_id>")]
 pub async fn cancel_subscription(
@@ -44,15 +44,11 @@ pub async fn cancel_subscription(
     db: &State<Database>,
     sub_id: Json<String>,
 ) -> Response<Value> {
-    Ok(json!({"status": "success"}))
+    /*
+    
+
+
+     */
+    !unimplemented!()
 }
 
-// test if authentication is working.
-#[get("/test_auth")]
-pub fn test_auth(token: Claims) -> Response<Value> {
-    if !token.has_permissions(&["read:all", "write:all"]) {
-        return Err(ApiError::Unauthorized);
-    }
-
-    Ok(json!({"status": "success"}))
-}

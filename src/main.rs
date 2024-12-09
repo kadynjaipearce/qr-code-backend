@@ -1,7 +1,7 @@
 mod database;
 mod errors;
 mod routes;
-mod stripe;
+mod payment;
 mod tests;
 mod utils;
 
@@ -19,6 +19,7 @@ fn index() -> &'static str {
 async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocket::ShuttleRocket {
     let env = Environments::new(secrets);
     let db = database::database::Database::new(&env).await.unwrap();
+    let stripe = stripe::Client::new(env.get("STRIPE_SECRET"));
 
     let cors = CorsOptions::default()
         .allowed_origins(AllowedOrigins::all())
@@ -30,17 +31,17 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
             "/",
             routes![
                 index,
-                routes::user::test_auth,
                 routes::user::create_user,
                 routes::qrcode::create_dynamic_qrcode,
                 routes::qrcode::scan,
-                routes::user::list_users_dynamic_qrcodes,
+                routes::qrcode::read_dynamic_qrcode,
                 routes::qrcode::update_dynamic_qrcode,
             ],
         )
         .attach(cors)
         .manage(env)
-        .manage(db);
+        .manage(db)
+        .manage(stripe);
 
     Ok(rocket.into())
 }

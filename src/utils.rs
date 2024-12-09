@@ -18,7 +18,10 @@ impl Environments {
     }
 
     pub fn get(&self, key: &str) -> String {
-        self.env.get(key).unwrap()
+        match self.env.get(key) {
+            Some(value) => value,
+            None => panic!("Missing Key: {}", key),
+        }
     }
 }
 

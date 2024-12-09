@@ -1,5 +1,4 @@
 use core::fmt;
-
 use rocket::{
     http::Status,
     response::{status, Responder},
@@ -17,6 +16,12 @@ pub enum ApiError {
 }
 
 pub type Response<T> = Result<T, ApiError>;
+
+impl From<stripe::StripeError> for ApiError {
+    fn from(value: stripe::StripeError) -> Self {
+        ApiError::InternalServerError(value.to_string())
+    }
+}
 
 impl From<surrealdb::Error> for ApiError {
     fn from(value: surrealdb::Error) -> Self {

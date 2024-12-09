@@ -76,8 +76,8 @@ impl Database {
 
         let mut result = self
             .db
-            .query("RETURN SELECT * FROM type::record($record, 'user')->created->dynamic_url")
-            .bind(("record", format!("user:{}", user_id.to_string())))
+            .query("RETURN SELECT * FROM type::thing('user', $user)->created->dynamic_url")
+            .bind(("user", user_id.to_string()))
             .await?;
 
         let created = result.take::<Vec<models::DynamicUrlResult>>(0)?;
@@ -126,6 +126,8 @@ impl Database {
            Params:
                id (string): The user's Auth0 ID.
 
+            Returns:
+               Response<Option<models::UserResult>>: The selected user object, or None if no user was found.
         */
 
         let mut result = self
@@ -165,14 +167,14 @@ impl Database {
             .db
             .query(
                 "
-        RELATE type::record($record, 'user')->created->CREATE type::thing('dynamic_url', uuid()) 
+        RELATE type::thing('user', $user)->created->CREATE type::thing('dynamic_url', uuid()) 
         SET server_url = $server_url, 
         target_url = $target_url, 
         created_at = time::now(), updated_at = time::now()",
             )
             .bind((
-                "record",
-                format!("user:{}", format_user_id(user_id.to_string())),
+                "user",
+                format_user_id(user_id.to_string()),
             ))
             .bind(("server_url", dynamic_url.server_url))
             .bind(("target_url", dynamic_url.target_url))
