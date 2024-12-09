@@ -8,27 +8,41 @@ use surrealdb::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
+    pub username: String,
     pub email: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserResult {
-    id: Thing,
+    id: RecordId,
+    username: String,
     email: String,
     created_at: Datetime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DynamicUrl {
+pub struct UserSubscription {
+    pub id: RecordId,
+    pub tier: String,
+    pub usage: i32,
+    pub start_date: Datetime,
+    pub end_date: Datetime,
+    pub subscription_status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DynamicQr {
     pub server_url: String,
     pub target_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DynamicUrlResult {
-    id: Thing,
+pub struct DynamicQrResult {
+    id: RecordId,
     server_url: String,
     target_url: String,
+    access_count: i32,
+    last_accessed: Datetime,
     created_at: Datetime,
     updated_at: Datetime,
 }

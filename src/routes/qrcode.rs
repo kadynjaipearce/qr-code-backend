@@ -1,5 +1,5 @@
 use crate::database::database::Database;
-use crate::database::models::{self, format_user_id, DynamicUrl};
+use crate::database::models::{self, format_user_id};
 use crate::errors::{ApiError, Response};
 use crate::routes::guard::Claims;
 
@@ -35,7 +35,7 @@ pub async fn scan(db: &State<Database>, server_url: &str) -> Response<Redirect> 
 pub async fn create_dynamic_qrcode(
     token: Claims,
     db: &State<Database>,
-    qrcode: Json<models::DynamicUrl>,
+    qrcode: Json<models::DynamicQr>,
 ) -> Response<Value> {
     if !token.has_permissions(&["write:dynamicqr"]) {
         return Err(ApiError::Unauthorized);
@@ -70,7 +70,7 @@ pub async fn read_dynamic_qrcode(token: Claims, db: &State<Database>) -> Respons
 pub async fn update_dynamic_qrcode(
     token: Claims,
     db: &State<Database>,
-    qrcode: Json<models::DynamicUrl>,
+    qrcode: Json<models::DynamicQr>,
 ) -> Response<Value> {
     if !token.has_permissions(&["write:dynamicqr"]) {
         return Err(ApiError::Unauthorized);

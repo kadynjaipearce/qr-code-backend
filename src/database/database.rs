@@ -45,13 +45,24 @@ impl Database {
             "
         DEFINE TABLE user SCHEMAFULL;
         DEFINE FIELD id ON user TYPE string ASSERT $value != NONE;
+        DEFINE FIELD username ON user TYPE string ASSERT $value != NONE;
         DEFINE FIELD email ON user TYPE string ASSERT $value != NONE;
         DEFINE FIELD created_at ON user TYPE datetime ASSERT $value != NONE;
+
+        DEFINE TABLE subscription SCHEMAFULL;
+        DEFINE FIELD id ON subscription TYPE string ASSERT $value != NONE;
+        DEFINE FIELD tier ON subscription TYPE string ASSERT $value != NONE;
+        DEFINE FIELD start_date ON subscription TYPE datetime ASSERT $value != NONE;
+        DEFINE FIELD end_date ON subscription TYPE datetime ASSERT $value != NONE;
+        DEFINE FIELD usage ON subscription TYPE int ASSERT $value != NONE;
+        DEFINE FIELD subscription_status ON subscription TYPE string ASSERT $value != NONE;
 
         DEFINE TABLE dynamic_url SCHEMAFULL;
         DEFINE FIELD id ON dynamic_url TYPE string ASSERT $value != NONE;
         DEFINE FIELD server_url ON dynamic_url TYPE string ASSERT $value != NONE;
         DEFINE FIELD target_url ON dynamic_url TYPE string ASSERT $value != NONE;
+        DEFINE FIELD access_count ON dynamic_url TYPE int ASSERT $value != NONE;
+        DEFINE FIELD last_accessed ON dynamic_url TYPE datetime ASSERT $value != NONE;
         DEFINE FIELD created_at ON dynamic_url TYPE datetime ASSERT $value != NONE;
         DEFINE FIELD updated_at ON dynamic_url TYPE datetime ASSERT $value != NONE; 
         ",
@@ -62,7 +73,7 @@ impl Database {
         Ok(Database { db })
     }
 
-    pub async fn list_user_urls(&self, user_id: &str) -> Response<Vec<models::DynamicUrlResult>> {
+    pub async fn list_user_urls(&self, user_id: &str) -> Response<Vec<models::DynamicQrResult>> {
         /*
            Lists all dynamic URLs created by a user.
 
@@ -80,7 +91,7 @@ impl Database {
             .bind(("user", user_id.to_string()))
             .await?;
 
-        let created = result.take::<Vec<models::DynamicUrlResult>>(0)?;
+        let created = result.take::<Vec<models::DynamicQrResult>>(0)?;
 
         if created.is_empty() {
             Err(ApiError::InternalServerError(
@@ -106,8 +117,9 @@ impl Database {
 
         let mut result = self
             .db
-            .query("CREATE type::thing('user', $id) SET email = $email, created_at = time::now();")
+            .query("CREATE type::thing('user', $id) SET username = $username, email = $email, created_at = time::now();")
             .bind(("id", format_user_id(user.id)))
+            .bind(("username", user.username))
             .bind(("email", user.email))
             .await?;
 
@@ -147,8 +159,8 @@ impl Database {
     pub async fn insert_dynamic_url(
         &self,
         user_id: &str,
-        dynamic_url: models::DynamicUrl,
-    ) -> Response<models::DynamicUrlResult> {
+        dynamic_url: models::DynamicQr,
+    ) -> Response<models::DynamicQrResult> {
         /*
            Inserts a new dynamic URL into the database.
 
@@ -180,7 +192,7 @@ impl Database {
             .bind(("target_url", dynamic_url.target_url))
             .await?;
 
-        match result.take::<Option<models::DynamicUrlResult>>(0)? {
+        match result.take::<Option<models::DynamicQrResult>>(0)? {
             Some(created) => Ok(created),
             None => Err(ApiError::InternalServerError(
                 "Failed to create dynamic URL.".to_string(),
@@ -218,7 +230,7 @@ impl Database {
         &self,
         server_url: &str,
         new_target_url: &str,
-    ) -> Response<models::DynamicUrlResult> {
+    ) -> Response<models::DynamicQrResult> {
         /*
              Updates the target URL of a dynamic URL in the database.
 
@@ -238,7 +250,7 @@ impl Database {
             .bind(("target_url", new_target_url.to_string()))
             .await?;
 
-        match result.take::<Option<models::DynamicUrlResult>>(0)? {
+        match result.take::<Option<models::DynamicQrResult>>(0)? {
             Some(updated) => Ok(updated),
             None => Err(ApiError::InternalServerError(
                 "No matching URL found.".to_string(),
@@ -261,7 +273,7 @@ impl Database {
             .bind(("id", id.to_string()))
             .await?;
 
-        match result.take::<Option<models::DynamicUrlResult>>(0)? {
+        match result.take::<Option<models::DynamicQrResult>>(0)? {
             Some(_) => Ok(()),
             None => Err(ApiError::InternalServerError(
                 "Failed to delete url.".to_string(),
