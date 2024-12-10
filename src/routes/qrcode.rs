@@ -10,18 +10,18 @@ use rocket::{get, post};
 use serde_json::json;
 
 #[get("/scan/<server_url>")]
-pub async fn scan(db: &State<Database>, server_url: &str) -> Response<Redirect> {
+pub async fn scan(server_url: &str, db: &State<Database>) -> Response<Redirect> {
     /*
-        Redirects to the target URL of a dynamic QR code.
+       Redirects to the target URL of a dynamic QR code.
 
-        Params:
-            server_url (str): The server URL of the dynamic QR code.
+       Params:
+           server_url (str): The server URL of the dynamic QR code.
 
-        Returns:
-            Response<Redirect>: Redirects to the target URL.
-    
-     */
-    
+       Returns:
+           Response<Redirect>: Redirects to the target URL.
+
+    */
+
     let url = db.lookup_dynamic_url(&server_url.to_string()).await?;
 
     if url.contains("Https://") || url.contains("http://") {
@@ -82,5 +82,3 @@ pub async fn update_dynamic_qrcode(
 
     Ok(json!({"updated": url}))
 }
-
-

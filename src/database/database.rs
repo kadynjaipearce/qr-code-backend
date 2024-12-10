@@ -184,10 +184,7 @@ impl Database {
         target_url = $target_url, 
         created_at = time::now(), updated_at = time::now()",
             )
-            .bind((
-                "user",
-                format_user_id(user_id.to_string()),
-            ))
+            .bind(("user", format_user_id(user_id.to_string())))
             .bind(("server_url", dynamic_url.server_url))
             .bind(("target_url", dynamic_url.target_url))
             .await?;

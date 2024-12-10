@@ -35,9 +35,6 @@ pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) 
     }
 }
 
-
-
-
 #[post("/cancel_subscription", format = "json", data = "<sub_id>")]
 pub async fn cancel_subscription(
     token: Claims,
@@ -45,10 +42,9 @@ pub async fn cancel_subscription(
     sub_id: Json<String>,
 ) -> Response<Value> {
     /*
-    
 
 
-     */
+
+    */
     !unimplemented!()
 }
-

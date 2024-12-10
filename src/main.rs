@@ -1,7 +1,7 @@
 mod database;
 mod errors;
-mod routes;
 mod payment;
+mod routes;
 mod tests;
 mod utils;
 
@@ -36,7 +36,7 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
                 routes::qrcode::scan,
                 routes::qrcode::read_dynamic_qrcode,
                 routes::qrcode::update_dynamic_qrcode,
-
+                payment::payments::create_checkout_session,
             ],
         )
         .attach(cors)

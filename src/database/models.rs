@@ -1,9 +1,6 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
-use surrealdb::{
-    sql::{Datetime, Thing},
-    RecordId,
-};
+use surrealdb::{sql::Datetime, RecordId};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
@@ -60,5 +57,5 @@ impl fmt::Display for User {
 
 pub fn format_user_id(auth0_id: String) -> String {
     // removes the | encoded in auth_ids e.g. auth_0|id becomes auth_0_id
-    auth0_id.replace(&['|', '-'], "_") 
+    auth0_id.replace(&['|', '-'], "_")
 }
