@@ -1,16 +1,57 @@
+use std::str::FromStr;
+
 use crate::database::database::Database;
 use crate::database::models::{format_user_id, User};
 use crate::errors::{ApiError, Response};
 use crate::routes::guard::Claims;
 
+use rocket::data::{FromData, ToByteUnit};
+use rocket::request::FromRequest;
 use rocket::serde::{json::Json, json::Value};
-use rocket::State;
+use rocket::{async_trait, State};
 use rocket::{get, post};
 use serde_json::json;
-use stripe::Client;
+use stripe::{Client, Event, Subscription, SubscriptionId};
 use stripe::{CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer};
+extern crate rocket;
+use rocket::data::{self, Data};
+use rocket::http::Status;
+use rocket::request::{Outcome, Request};
+use stripe::{EventObject, EventType, Webhook};
 
 use crate::payment::models::PaymentRequest;
+
+#[post("/cancel_subscription", format = "json", data = "<subscription>")]   
+pub async fn cancel_subscription(
+    token: Claims,
+    subscription: Json<String>,
+    db: &State<Database>,
+    stripe: &State<Client>,
+) -> Response<Value> {
+    /*
+        Cancels a subscription for a user.
+
+        Params:
+            subscription: subscription object containing the subscription details.
+
+        Returns:
+            Response<Value>: the cancelled subscription object in a json response.
+
+    */
+
+    // get the user from the database.
+
+    Subscription::cancel(
+        &stripe,
+        &SubscriptionId::from_str(&subscription).unwrap(),
+        stripe::CancelSubscription {
+            prorate: Some(true),
+            ..Default::default()
+        },
+    );
+
+    !unimplemented!()
+}
 
 #[post("/create_checkout_session", format = "json", data = "<payment>")]
 pub async fn create_checkout_session(
@@ -78,4 +119,98 @@ pub async fn create_checkout_session(
         "session_url": session.url,
         "session_id": session.id,
     }))
+}
+
+
+// todo: implement webhook to update user subscription status.
+
+/*
+    impl: webhook to catch new subscription events.
+
+    then impl: event handler for CheckoutSessionCompleted
+*/
+
+#[post("/stripe_webhook", format = "json", data = "<payload>")]
+pub async fn stripe_webhook(stripe_signature: StripeSignature<'_>, payload: Payload) -> Response<Value> {
+    /*
+        Stripe webhook to catch new subscription events.
+
+        Params:
+            stripe_signature: stripe signature object containing the stripe signature.
+            payload: payload object containing the payload details.
+
+        Returns:
+            Response<Value>: the event object in a json response.
+
+    */
+
+    // verify the stripe signature.
+
+    if let Ok(event) = Webhook::construct_event(&payload.contents, stripe_signature.signature, "") {
+        match event.type_ {
+            EventType::CheckoutSessionCompleted => {
+               !unimplemented!()
+            },
+
+            EventType::CustomerSubscriptionCreated => {
+                !unimplemented!()
+            },
+
+            EventType::CustomerSubscriptionPaused => {
+                !unimplemented!()
+            },
+
+            EventType::CustomerSubscriptionResumed => {
+                !unimplemented!()
+            },
+
+            EventType::CustomerSubscriptionDeleted => {
+                !unimplemented!()
+            },
+            _ => return Ok(json!(event)),
+            
+        } 
+    } else {
+        return Err(ApiError::BadRequest);
+    }
+}
+
+pub struct Payload {
+    pub contents: String
+}
+
+#[rocket::async_trait]
+impl<'r> FromData<'r> for Payload {
+    type Error = ApiError;
+
+    async fn from_data(req: &'r rocket::Request<'_>, data: rocket::Data<'r>) -> rocket::data::Outcome<'r, Self> {
+        use rocket::outcome::Outcome::*;
+        use ApiError::*;
+
+        let limit = req.limits().get("form").unwrap_or_else(|| 1_000_000.bytes());
+
+        let contents = match data.open(limit).into_string().await {
+            Ok(string) if string.is_complete() => string.into_inner(),
+            Ok(_) => return Error((Status::PayloadTooLarge, ApiError::BadRequest)),
+            Err(error) => return Error((Status::InternalServerError, ApiError::InternalServerError(error.to_string()))),
+        };
+
+        Success(Payload { contents })
+    }
+}
+
+pub struct StripeSignature<'a> {
+    pub signature: &'a str,
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for StripeSignature<'r> {
+    type Error = ApiError;
+
+    async fn from_request(req: &'r rocket::Request<'_>) -> rocket::request::Outcome<Self, Self::Error> {
+        match req.headers().get_one("Stripe-Signature") {
+            Some(signature) => rocket::outcome::Outcome::Success(StripeSignature { signature }),
+            None => rocket::outcome::Outcome::Error((Status::BadRequest, ApiError::BadRequest)), 
+        }
+    }
 }
