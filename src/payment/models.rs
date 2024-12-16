@@ -1,6 +1,5 @@
-use core::fmt;
 use serde::{Deserialize, Serialize};
-use surrealdb::{sql::Datetime, RecordId};
+
 
 use crate::database::models::User;
 
