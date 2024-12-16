@@ -4,7 +4,6 @@ use crate::database::database::Database;
 use crate::database::models::{format_user_id, User};
 use crate::errors::{ApiError, Response};
 use crate::routes::guard::Claims;
-use crate::routes::user;
 
 use rocket::data::{FromData, ToByteUnit};
 use rocket::request::FromRequest;
