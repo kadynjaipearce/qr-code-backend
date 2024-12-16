@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-
-
 use crate::database::models::User;
 
 #[derive(Debug, Serialize, Deserialize)]
