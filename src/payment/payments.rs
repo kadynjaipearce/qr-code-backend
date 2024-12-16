@@ -78,6 +78,8 @@ pub async fn update_subscription(
 }
 */
 
+// test comment
+
 #[delete("/subscription/cancel/<user>", format = "json")]
 pub async fn cancel_subscription(
     token: Claims,
