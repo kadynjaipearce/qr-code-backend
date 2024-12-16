@@ -11,10 +11,10 @@ pub struct User {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserResult {
-    id: RecordId,
-    username: String,
-    email: String,
-    created_at: Datetime,
+    pub id: RecordId,
+    pub username: String,
+    pub email: String,
+    pub created_at: Datetime,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

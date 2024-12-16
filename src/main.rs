@@ -28,14 +28,14 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
 
     let rocket = rocket::build()
         .mount(
-            "/",
+            "/api",
             routes![
                 index,
                 routes::user::create_user,
-                routes::qrcode::create_dynamic_qrcode,
+                routes::user::create_dynamic_qrcode,
                 routes::qrcode::scan,
-                routes::qrcode::read_dynamic_qrcode,
-                routes::qrcode::update_dynamic_qrcode,
+                routes::user::read_dynamic_qrcode,
+                routes::user::update_dynamic_qrcode,
                 payment::payments::create_checkout_session,
             ],
         )

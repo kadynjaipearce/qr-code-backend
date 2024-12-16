@@ -277,4 +277,29 @@ impl Database {
             )),
         }
     }
+
+    pub async fn insert_subscription(
+        &self,
+        user_id: &str,
+        subscription: models::UserSubscription,
+    ) -> Response<models::UserSubscription> {
+        /*
+            Inserts a new user subscription into the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+                subscription (models::UserSubscription): Contains:
+                    - `tier`: The subscription tier.
+                    - `usage`: The usage count.
+                    - `start_date`: The start date of the subscription.
+                    - `end_date`: The end date of the subscription.
+                    - `subscription_status`: The status of the subscription.
+
+            Returns:
+                Response<models::UserSubscription>: The inserted user subscription object.
+
+        */
+
+        !unimplemented!()
+    }
 }
