@@ -1,0 +1,77 @@
+name: Shuttle Deploy
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  lint_and_format:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Set up Rust
+      - name: Set up Rust
+        uses: actions/setup-rust@v1
+        with:
+          rust-version: '1.82.0'
+
+      # Install dependencies (like clippy, rustfmt)
+      - name: Install dependencies
+        run: |
+          rustup component add clippy
+          rustup component add rustfmt
+
+      # Format code
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
+
+      # Lint code
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features
+
+  deploy:
+    needs: lint_and_format
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Set up Rust
+      - name: Set up Rust
+        uses: actions/setup-rust@v1
+        with:
+          rust-version: '1.82.0'
+
+      # Deploy to Shuttle
+      - name: Shuttle Deploy
+        uses: shuttle-hq/deploy-action@main
+        with:
+          deploy-key: ${{ secrets.SHUTTLE_API_KEY }}
+          working-directory: "backend"
+          name: "qr-backend"
+          allow-dirty: "true"
+          no-test: "true"
+          cargo-shuttle-version: "0.49.0"
+          secrets: |
+            AUTH0_AUDIENCE = '${{ secrets.AUTH0_AUDIENCE }}'
+            AUTH0_DOMAIN = '${{ secrets.AUTH0_DOMAIN }}'
+            AUTH0_SECRET = '${{ secrets.AUTH0_SECRET }}'
+            AUTH0_KNOWN_JWKS = '${{ secrets.AUTH0_KNOWN_JWKS }}'
+            DATABASE_URL = '${{ secrets.DATABASE_URL }}'
+            DATABASE_USERNAME = '${{ secrets.DATABASE_USERNAME }}'
+            DATABASE_PASSWORD = '${{ secrets.DATABASE_PASSWORD }}'
+            STRIPE_KEY = '${{ secrets.STRIPE_KEY }}'
+            STRIPE_SECRET = '${{ secrets.STRIPE_SECRET }}'
+            STRIPE_PRODUCT_LITE = '${{ secrets.STRIPE_PRODUCT_LITE }}'
+            STRIPE_PRODUCT_PRO = '${{ secrets.STRIPE_PRODUCT_PRO }}'
+
