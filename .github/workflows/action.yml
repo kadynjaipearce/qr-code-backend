@@ -69,6 +69,6 @@ jobs:
         with:
           shuttle-api-key: ${{ secrets.SHUTTLE_API_KEY }}
           project-id: proj_01JF9X2ER6PF2Y645890WDFJYC
-          cargo-shuttle-version: "0.48.1"
+          cargo-shuttle-version: "0.48.2"
           extra-args: --allow-dirty --debug
 
