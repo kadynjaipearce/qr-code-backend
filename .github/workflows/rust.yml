@@ -50,7 +50,7 @@ jobs:
           name: "qr-backend"
           allow-dirty: "true"
           no-test: "true"
-          cargo-shuttle-version: "0.49.0"
+          cargo-shuttle-version: "0.28.1"
           secrets: |
             AUTH0_AUDIENCE = '${{ secrets.AUTH0_AUDIENCE }}'
             AUTH0_DOMAIN = '${{ secrets.AUTH0_DOMAIN }}'
