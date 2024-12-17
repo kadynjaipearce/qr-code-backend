@@ -44,7 +44,7 @@ jobs:
           STRIPE_PRODUCT_LITE: ${{ secrets.STRIPE_PRODUCT_LITE }}
           STRIPE_PRODUCT_PRO: ${{ secrets.STRIPE_PRODUCT_PRO }}
         run: |
-          echo "MY_SECRET is ${{ env.SHUTTLE_API_KEY }}"
+          echo "MY_SECRET is ${{ secrets.SHUTTLE_API_KEY }}"
           touch Secrets.toml
           echo "AUTH0_AUDIENCE = '${AUTH0_AUDIENCE}'" >> Secrets.toml
           echo "AUTH0_DOMAIN = '${AUTH0_DOMAIN}'" >> Secrets.toml
