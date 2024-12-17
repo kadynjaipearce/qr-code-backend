@@ -35,22 +35,15 @@ jobs:
         with:
           rust-version: '1.82.0'
 
-      - name: Ensure Secrets.toml file is writable
-        run: |
-              chmod -R 777 .
-              touch Secrets.toml
-              chmod 666 Secrets.toml
-
       # Deploy to Shuttle
       - name: Shuttle Deploy
-        uses: shuttle-hq/deploy-action@main
+        uses: shuttle-hq/deploy-action@v2
         with:
-          deploy-key: ${{ secrets.SHUTTLE_API_KEY }}
+          shuttle-api-key: ${{ secrets.SHUTTLE_API_KEY }}
+          project_id: ${{ secrets.SHUTTLE_PROJECT_ID }}
           working-directory: "/" 
-          name: "qr-backend"
-          allow-dirty: "true"
-          no-test: "true"
-          cargo-shuttle-version: "0.28.1"
+          cargo-shuttle-version: "0.49.0"
+          extra-args: --allow-dirty --debug
           secrets: |
             AUTH0_AUDIENCE = '${{ secrets.AUTH0_AUDIENCE }}'
             AUTH0_DOMAIN = '${{ secrets.AUTH0_DOMAIN }}'
