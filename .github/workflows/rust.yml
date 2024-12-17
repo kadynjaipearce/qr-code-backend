@@ -66,12 +66,9 @@ jobs:
       # Deploy to Shuttle
       - name: Shuttle Deploy
         uses: shuttle-hq/deploy-action@v2
-        env: 
-          SHUTTLE_API_KEY: ${{ secrets.SHUTTLE_API_KEY }}
-          SHUTTLE_PROJECT_ID: ${{ secrets.SHUTTLE_PROJECT_ID }}
         with:
-          shuttle-api-key: '${SHUTTLE_API_KEY}'
-          project-id: '${SHUTTLE_PROJECT_ID}'
+          shuttle-api-key: ${{ secrets.SHUTTLE_API_KEY }}
+          project-id: proj_01JF9X2ER6PF2Y645890WDFJYC
           working-directory: "/" 
           cargo-shuttle-version: "0.49.0"
           extra-args: --allow-dirty --debug
