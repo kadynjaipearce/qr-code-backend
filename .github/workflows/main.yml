@@ -28,13 +28,7 @@ jobs:
       # Checkout the code
       - name: Checkout code
         uses: actions/checkout@v4
-
-      # Set up Rust
-      - name: Set up Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          rust-version: '1.82.0'
-
+        
       - name: Secrets
         env:
           AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
