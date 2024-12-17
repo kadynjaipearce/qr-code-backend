@@ -37,6 +37,7 @@ jobs:
 
       - name: Ensure Secrets.toml file is writable
         run: |
+              chmod -R 777 .
               touch Secrets.toml
               chmod 666 Secrets.toml
 
