@@ -35,6 +35,11 @@ jobs:
         with:
           rust-version: '1.82.0'
 
+      - name: Ensure Secrets.toml file is writable
+        run: |
+              touch Secrets.toml
+              chmod 666 Secrets.toml
+
       # Deploy to Shuttle
       - name: Shuttle Deploy
         uses: shuttle-hq/deploy-action@main
