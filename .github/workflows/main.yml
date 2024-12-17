@@ -34,7 +34,7 @@ jobs:
         run: |
           touch Secrets.toml
           echo "AUTH0_AUDIENCE = ${{ secrets.AUTH0_AUDIENCE }}" >> Secrets.toml
-          echo "AUTH0_DOMAIN = ${{ secrets.AUTH0_DOMAIN} }" >> Secrets.toml
+          echo "AUTH0_DOMAIN = ${{ secrets.AUTH0_DOMAIN }}" >> Secrets.toml
           echo "AUTH0_SECRET = ${{ secrets.AUTH0_SECRET }}" >> Secrets.toml
           echo "AUTH0_KNOWN_JWKS = ${{ secrets.AUTH0_KNOWN_JWKS }}" >> Secrets.toml
           echo "DATABASE_URL = ${{ secrets.DATABASE_URL }}" >> Secrets.toml
