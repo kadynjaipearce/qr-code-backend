@@ -72,8 +72,7 @@ jobs:
         with:
           shuttle-api-key: '${SHUTTLE_API_KEY}'
           project-id: '${SHUTTLE_PROJECT_ID}'
-          name: '${SHUTTLE_PROJECT_ID}'
           working-directory: "/" 
-          cargo-shuttle-version: "0.48.1"
+          cargo-shuttle-version: "0.49.0"
           extra-args: --allow-dirty --debug
 
