@@ -295,7 +295,7 @@ impl Database {
 
         let mut result = self
             .db
-            .query("SELECT * FROM type::thing('user', $user)->created->subscription")
+            .query("SELECT subscription_id FROM type::thing('user', $user)->created->subscription")
             .bind(("user", user_id.to_string()))
             .await?;
 
