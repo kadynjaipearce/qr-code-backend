@@ -278,6 +278,34 @@ impl Database {
         }
     }
 
+    pub async fn lookup_subscription_id(
+        &self,
+        user_id: &str,
+    ) -> Response<Option<models::UserSubscription>> {
+        /*
+            Looks up a user's subscription in the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+
+            Returns:
+                Response<Option<models::UserSubscription>>: The user's subscription object, or None if no subscription was found.
+
+        */
+
+        let mut result = self
+            .db
+            .query("SELECT * FROM type::thing('user', $user)->created->subscription")
+            .bind(("user", user_id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::UserSubscription>>(0)? {
+            Some(subscription) => Ok(Some(subscription)),
+            None => Ok(None),
+        }
+    }
+    
+
     pub async fn insert_subscription(
         &self,
         user_id: &str,
