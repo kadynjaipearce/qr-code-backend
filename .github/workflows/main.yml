@@ -31,32 +31,19 @@ jobs:
         
         
       - name: Secrets
-        env:
-          AUTH0_AUDIENCE: ${{ secrets.AUTH0_AUDIENCE }}
-          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
-          AUTH0_SECRET: ${{ secrets.AUTH0_SECRET }}
-          AUTH0_KNOWN_JWKS: ${{ secrets.AUTH0_KNOWN_JWKS }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
-          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-          STRIPE_KEY: ${{ secrets.STRIPE_KEY }}
-          STRIPE_SECRET: ${{ secrets.STRIPE_SECRET }}
-          STRIPE_PRODUCT_LITE: ${{ secrets.STRIPE_PRODUCT_LITE }}
-          STRIPE_PRODUCT_PRO: ${{ secrets.STRIPE_PRODUCT_PRO }}
         run: |
-          echo "MY_SECRET is ${{ secrets.SHUTTLE_API_KEY }}"
           touch Secrets.toml
-          echo "AUTH0_AUDIENCE = '${AUTH0_AUDIENCE}'" >> Secrets.toml
-          echo "AUTH0_DOMAIN = '${AUTH0_DOMAIN}'" >> Secrets.toml
-          echo "AUTH0_SECRET = '${AUTH0_SECRET}'" >> Secrets.toml
-          echo "AUTH0_KNOWN_JWKS = '${AUTH0_KNOWN_JWKS}'" >> Secrets.toml
-          echo "DATABASE_URL = '${DATABASE_URL}'" >> Secrets.toml
-          echo "DATABASE_USERNAME = '${DATABASE_USERNAME}'" >> Secrets.toml
-          echo "DATABASE_PASSWORD = '${DATABASE_PASSWORD}'" >> Secrets.toml
-          echo "STRIPE_KEY = '${STRIPE_KEY}'" >> Secrets.toml
-          echo "STRIPE_SECRET = '${STRIPE_SECRET}'" >> Secrets.toml
-          echo "STRIPE_PRODUCT_LITE = '${STRIPE_PRODUCT_LITE}'" >> Secrets.toml
-          echo "STRIPE_PRODUCT_PRO = '${STRIPE_PRODUCT_PRO}'" >> Secrets.toml
+          echo "AUTH0_AUDIENCE = ${{ AUTH0_AUDIENCE }}" >> Secrets.toml
+          echo "AUTH0_DOMAIN = ${{ AUTH0_DOMAIN} }" >> Secrets.toml
+          echo "AUTH0_SECRET = ${{ AUTH0_SECRET }}" >> Secrets.toml
+          echo "AUTH0_KNOWN_JWKS = ${{ AUTH0_KNOWN_JWKS }}" >> Secrets.toml
+          echo "DATABASE_URL = ${{ DATABASE_URL }}" >> Secrets.toml
+          echo "DATABASE_USERNAME = ${{ DATABASE_USERNAME }}" >> Secrets.toml
+          echo "DATABASE_PASSWORD = ${{ DATABASE_PASSWORD }}" >> Secrets.toml
+          echo "STRIPE_KEY = ${{ STRIPE_KEY }}" >> Secrets.toml
+          echo "STRIPE_SECRET = ${{ STRIPE_SECRET }}" >> Secrets.toml
+          echo "STRIPE_PRODUCT_LITE = ${{ STRIPE_PRODUCT_LITE }}" >> Secrets.toml
+          echo "STRIPE_PRODUCT_PRO = ${{ STRIPE_PRODUCT_PRO }}" >> Secrets.toml
         
 
       # Deploy to Shuttle
