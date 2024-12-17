@@ -30,7 +30,6 @@ jobs:
 
   deploy:
     needs: [test, formatting]
-    if: github.ref == 'refs/heads/development'
     runs-on: ubuntu-latest
     steps:
       # Checkout the code
