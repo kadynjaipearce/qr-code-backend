@@ -12,7 +12,21 @@ use utils::Environments;
 
 #[get("/")]
 fn index() -> &'static str {
-    "Running..."
+    r#"
+    Welcome to the API!
+
+    How to Use:
+    This API is intended to be accessed only from the frontend.
+
+    1. Make sure to make requests from the frontend (browser, client-side, etc.).
+    2. The backend only accepts requests from the frontend, any direct requests from tools like Postman or Curl will be rejected.
+    
+    CORS (Cross-Origin Resource Sharing) must be properly configured to allow these requests.
+
+    Stay tuned for more API documentation and features in the future!
+
+    Thank you for using our API!
+    "#
 }
 
 #[shuttle_runtime::main]
