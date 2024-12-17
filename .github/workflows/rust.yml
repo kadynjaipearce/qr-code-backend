@@ -45,6 +45,7 @@ jobs:
         uses: shuttle-hq/deploy-action@main
         with:
           deploy-key: ${{ secrets.SHUTTLE_API_KEY }}
+          working-directory: "/" 
           name: "qr-backend"
           allow-dirty: "true"
           no-test: "true"
