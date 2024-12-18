@@ -334,7 +334,6 @@ impl Database {
             start_date = time::now(), 
             end_date = NONE, 
             subscription_status = $subscription_status",
-  
         )
         .bind(("subscription_id", subscription.id)).bind(("user", user_id.to_string()))
         .bind(("tier", subscription.tier))
