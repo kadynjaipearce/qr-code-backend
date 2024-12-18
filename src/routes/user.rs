@@ -1,11 +1,11 @@
 use crate::database::database::Database;
-use crate::database::models::{format_user_id, User, DynamicQr, DynamicQrResult, self};
+use crate::database::models::{self, format_user_id, DynamicQr, DynamicQrResult, User};
 use crate::errors::{ApiError, Response};
 use crate::routes::guard::Claims;
 
 use rocket::serde::{json::Json, json::Value};
 use rocket::State;
-use rocket::{get, post, put, delete};
+use rocket::{delete, get, post, put};
 use serde_json::json;
 
 #[post("/user/create_user", format = "json", data = "<user>")]
@@ -86,4 +86,3 @@ pub async fn update_dynamic_qrcode(
 
     Ok(json!({"updated": url}))
 }
-
