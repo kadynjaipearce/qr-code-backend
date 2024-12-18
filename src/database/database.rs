@@ -50,10 +50,10 @@ impl Database {
         DEFINE FIELD created_at ON user TYPE datetime ASSERT $value != NONE;
 
         DEFINE TABLE subscription SCHEMAFULL;
-        DEFINE FIELD id ON subscription TYPE string ASSERT $value != NONE;
+        DEFINE FIELD subscription_id ON subscription TYPE string ASSERT $value != NONE;
         DEFINE FIELD tier ON subscription TYPE string ASSERT $value != NONE;
         DEFINE FIELD start_date ON subscription TYPE datetime ASSERT $value != NONE;
-        DEFINE FIELD end_date ON subscription TYPE datetime ASSERT $value != NONE;
+        DEFINE FIELD end_date ON subscription TYPE datetime;
         DEFINE FIELD usage ON subscription TYPE int ASSERT $value != NONE;
         DEFINE FIELD subscription_status ON subscription TYPE string ASSERT $value != NONE;
 
@@ -327,7 +327,26 @@ impl Database {
                 Response<models::UserSubscription>: The inserted user subscription object.
 
         */
+        let mut result = self.db.query(
+            "RELATE type::thing('user', $user)->subscribed->CREATE type::thing('subscription', $user) 
+            SET subscription_id = $subscription_id,
+            tier = $tier, 
+            usage = 0, 
+            start_date = time::now(), 
+            end_date = NONE, 
+            subscription_status = $subscription_status",
+  
+        )
+        .bind(("subscription_id", subscription.id)).bind(("user", user_id.to_string()))
+        .bind(("tier", subscription.tier))
+        .bind(("subscription_status", subscription.subscription_status)).await?;
 
-        !unimplemented!()
+        match result.take::<Option<models::UserSubscription>>(0)? {
+            Some(created) => Ok(created),
+            None => Err(ApiError::InternalServerError(
+                "Failed to create subscription.".to_string(),
+            )),
+        }
+
     }
 }
