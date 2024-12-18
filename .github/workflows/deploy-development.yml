@@ -1,6 +1,12 @@
-name: Shuttle Deploy
+name: Deploy Development Server
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
 
 jobs:
   test:
