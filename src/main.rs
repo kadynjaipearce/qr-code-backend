@@ -45,9 +45,9 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
             "/api",
             routes![
                 index,
+                routes::qrcode::scan,
                 routes::user::create_user,
                 routes::user::create_dynamic_qrcode,
-                routes::qrcode::scan,
                 routes::user::read_dynamic_qrcode,
                 routes::user::update_dynamic_qrcode,
                 payment::payments::create_checkout_session,
