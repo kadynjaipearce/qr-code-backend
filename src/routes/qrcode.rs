@@ -30,5 +30,3 @@ pub async fn scan(server_url: &str, db: &State<Database>) -> Response<Redirect> 
 
     Ok(Redirect::to(format!("http://{}", url)))
 }
-
-

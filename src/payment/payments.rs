@@ -63,10 +63,10 @@ pub async fn update_subscription(
                         quantity: Some(1),
                         ..Default::default()
                     }
-                    
-                    
-                    
-                    
+
+
+
+
                     ]),
                     ..Default::default()
                 },
@@ -112,7 +112,8 @@ pub async fn cancel_subscription(
                     prorate: Some(true),
                     ..Default::default()
                 },
-            ).await?;
+            )
+            .await?;
 
             Ok(json!({"message": "Subscription cancelled."}))
         }

@@ -304,7 +304,6 @@ impl Database {
             None => Ok(None),
         }
     }
-    
 
     pub async fn insert_subscription(
         &self,
@@ -347,6 +346,5 @@ impl Database {
                 "Failed to create subscription.".to_string(),
             )),
         }
-
     }
 }
