@@ -3,12 +3,13 @@ use crate::database::models::{self, format_user_id, DynamicQr, DynamicQrResult, 
 use crate::errors::{ApiError, Response};
 use crate::routes::guard::Claims;
 
+use rocket::http::Status;
 use rocket::serde::{json::Json, json::Value};
 use rocket::State;
 use rocket::{delete, get, post, put};
 use serde_json::json;
 
-#[post("/user/create_user", format = "json", data = "<user>")]
+#[post("/user", format = "json", data = "<user>")]
 pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) -> Response<Value> {
     /*
            Lists all dynamic URLs created by a user.
@@ -30,15 +31,18 @@ pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) 
     }
 
     match db.insert_user(user.into_inner()).await {
-        Ok(user) => Ok(json!({"data": user})),
+        Ok(user) => {
+            Ok(json!({"status": Status::Created, "message": "User created. ", "data": user}))
+        }
         Err(err) => Err(ApiError::InternalServerError(err.to_string())),
     }
 }
 
-#[post("/user/create_dynamic_qrcode", format = "json", data = "<qrcode>")]
-pub async fn create_dynamic_qrcode(
+#[post("/user/<user_id>/qr_codes", format = "json", data = "<qrcode>")]
+pub async fn create_qrcodes(
     token: Claims,
     db: &State<Database>,
+    user_id: String,
     qrcode: Json<models::DynamicQr>,
 ) -> Response<Value> {
     if !token.has_permissions(&["write:dynamicqr"]) {
@@ -52,8 +56,8 @@ pub async fn create_dynamic_qrcode(
     Ok(json!({"dynamic_url": url}))
 }
 
-#[get("/user/read_dynamic_qrcode")]
-pub async fn read_dynamic_qrcode(token: Claims, db: &State<Database>) -> Response<Value> {
+#[get("/user/<user_id>/qr_codes")]
+pub async fn read_qrcodes(token: Claims, user_id: String, db: &State<Database>) -> Response<Value> {
     if !token.has_permissions(&["read:dynamicqr"]) {
         return Err(ApiError::Unauthorized);
     }
@@ -70,10 +74,12 @@ pub async fn read_dynamic_qrcode(token: Claims, db: &State<Database>) -> Respons
     Ok(json!({"dynamic_urls": urls}))
 }
 
-#[post("/user/update_dynamic_qrcode", format = "json", data = "<qrcode>")]
-pub async fn update_dynamic_qrcode(
+#[put("/user/<user_id>/<qr_id>", format = "json", data = "<qrcode>")]
+pub async fn update_qrcodes(
     token: Claims,
     db: &State<Database>,
+    user_id: String,
+    qr_id: String,
     qrcode: Json<models::DynamicQr>,
 ) -> Response<Value> {
     if !token.has_permissions(&["write:dynamicqr"]) {
@@ -85,4 +91,20 @@ pub async fn update_dynamic_qrcode(
         .await?;
 
     Ok(json!({"updated": url}))
+}
+
+#[delete("/user/<user_id>/<qr_id>")]
+pub async fn delete_qrcodes(
+    token: Claims,
+    db: &State<Database>,
+    user_id: String,
+    qr_id: String,
+) -> Response<Value> {
+    if !token.has_permissions(&["delete:dynamicqr"]) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let url = db.delete_dynamic_url(&qr_id).await?;
+
+    Ok(json!({"deleted": url}))
 }

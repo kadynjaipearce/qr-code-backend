@@ -278,10 +278,7 @@ impl Database {
         }
     }
 
-    pub async fn lookup_subscription_id(
-        &self,
-        user_id: &str,
-    ) -> Response<Option<models::UserSubscription>> {
+    pub async fn lookup_subscription_id(&self, user_id: &str) -> Response<Option<String>> {
         /*
             Looks up a user's subscription in the database.
 
@@ -295,12 +292,14 @@ impl Database {
 
         let mut result = self
             .db
-            .query("SELECT subscription_id FROM type::thing('user', $user)->created->subscription")
+            .query(
+                "SELECT subscription_id FROM type::thing('user', $user)->subscribed->subscription",
+            )
             .bind(("user", user_id.to_string()))
             .await?;
 
         match result.take::<Option<models::UserSubscription>>(0)? {
-            Some(subscription) => Ok(Some(subscription)),
+            Some(subscription) => Ok(Some(subscription.id.to_string())),
             None => Ok(None),
         }
     }
