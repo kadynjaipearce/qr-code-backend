@@ -5,7 +5,7 @@ use rocket::{
     serde::json::Json,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ApiError {

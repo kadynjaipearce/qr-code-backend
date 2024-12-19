@@ -47,10 +47,13 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
                 index,
                 routes::qrcode::scan,
                 routes::user::create_user,
-                routes::user::create_dynamic_qrcode,
-                routes::user::read_dynamic_qrcode,
-                routes::user::update_dynamic_qrcode,
+                routes::user::create_qrcodes,
+                routes::user::read_qrcodes,
+                routes::user::update_qrcodes,
+                routes::user::delete_qrcodes,
+                payment::payments::stripe_webhook,
                 payment::payments::create_checkout_session,
+                payment::payments::cancel_subscription,   
             ],
         )
         .attach(cors)
