@@ -54,3 +54,4 @@ jobs:
             STRIPE_SECRET = '${{ secrets.STRIPE_SECRET }}'
             STRIPE_PRODUCT_LITE = '${{ secrets.STRIPE_PRODUCT_LITE }}'
             STRIPE_PRODUCT_PRO = '${{ secrets.STRIPE_PRODUCT_PRO }}'
+            STRIPE_WEBHOOK_SECRET = '${{ secrets.STRIPE_WEBHOOK_SECRET}}'
