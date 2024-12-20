@@ -8,6 +8,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct ApiResponse {
+    pub status: u16,
+    pub message: String,
+    pub data: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ApiError {
     BadRequest,
     NotFound,

@@ -1,6 +1,6 @@
 use crate::database::database::Database;
 use crate::database::models::{self, format_user_id, DynamicQr, DynamicQrResult, User};
-use crate::errors::{ApiError, Response};
+use crate::errors::{ApiError, ApiResponse, Response};
 use crate::routes::guard::Claims;
 
 use rocket::http::Status;
@@ -24,9 +24,7 @@ pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) 
 
     */
 
-    let user_token = format_user_id(token.sub.clone());
-
-    if user_token != user.id {
+    if user.id != format_user_id(token.sub) {
         return Err(ApiError::Unauthorized);
     }
 
@@ -38,7 +36,7 @@ pub async fn create_user(token: Claims, db: &State<Database>, user: Json<User>) 
     }
 }
 
-#[post("/user/<user_id>/qr_codes", format = "json", data = "<qrcode>")]
+#[post("/user/<user_id>/qrcode", format = "json", data = "<qrcode>")]
 pub async fn create_qrcodes(
     token: Claims,
     db: &State<Database>,
@@ -49,62 +47,85 @@ pub async fn create_qrcodes(
         return Err(ApiError::Unauthorized);
     }
 
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
     let url = db
-        .insert_dynamic_url(&token.sub, qrcode.into_inner())
+        .insert_dynamic_url(&user_id, qrcode.into_inner())
         .await?;
 
     Ok(json!({"dynamic_url": url}))
 }
 
-#[get("/user/<user_id>/qr_codes")]
-pub async fn read_qrcodes(token: Claims, user_id: String, db: &State<Database>) -> Response<Value> {
+#[get("/user/<user_id>/qrcode")]
+pub async fn read_qrcodes(token: Claims, user_id: &str, db: &State<Database>) -> Response<Json<ApiResponse>> {
     if !token.has_permissions(&["read:dynamicqr"]) {
         return Err(ApiError::Unauthorized);
     }
 
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
     let urls = db
-        .list_user_urls(format_user_id(token.sub).as_str())
+        .list_user_urls(&user_id)
         .await?;
 
-    // get users sub err: unauthed, does'nt exist (auto)
-    // get qr codes related to user :err: non exist
-    // format to Json response
-    // return
-
-    Ok(json!({"dynamic_urls": urls}))
+    Ok(Json(ApiResponse {
+        status: Status::Ok.code,
+        message: "Dynamic URLs".to_string(),
+        data: json!(urls),
+    }))
 }
 
-#[put("/user/<user_id>/<qr_id>", format = "json", data = "<qrcode>")]
+#[put("/user/<user_id>/qrcode/<qrcode_id>", format = "json", data = "<qrcode>")]
 pub async fn update_qrcodes(
     token: Claims,
     db: &State<Database>,
-    user_id: String,
-    qr_id: String,
+    user_id: &str,
+    qrcode_id: &str,
     qrcode: Json<models::DynamicQr>,
-) -> Response<Value> {
+) -> Response<Json<ApiResponse>> {
     if !token.has_permissions(&["write:dynamicqr"]) {
         return Err(ApiError::Unauthorized);
     }
 
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
     let url = db
-        .update_dynamic_url(&qrcode.server_url, &qrcode.target_url)
+        .update_dynamic_url(&qrcode_id, &qrcode.target_url)
         .await?;
 
-    Ok(json!({"updated": url}))
+    Ok(Json(ApiResponse {
+        status: Status::Ok.code,
+        message: "Dynamic URL updated".to_string(),
+        data: json!(url),
+    }))
 }
 
-#[delete("/user/<user_id>/<qr_id>")]
+#[delete("/user/<user_id>/qrcode/<qrcode_id>")]
 pub async fn delete_qrcodes(
     token: Claims,
     db: &State<Database>,
-    user_id: String,
-    qr_id: String,
-) -> Response<Value> {
+    user_id: &str,
+    qrcode_id: &str,
+) -> Response<Json<ApiResponse>> {
     if !token.has_permissions(&["delete:dynamicqr"]) {
         return Err(ApiError::Unauthorized);
     }
 
-    let url = db.delete_dynamic_url(&qr_id).await?;
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
 
-    Ok(json!({"deleted": url}))
+    let url = db.delete_dynamic_url(&qrcode_id).await?;
+
+    Ok(Json(ApiResponse {
+        status: Status::Ok.code,
+        message: "Dynamic URL deleted".to_string(),
+        data: json!(url),
+    }))
 }

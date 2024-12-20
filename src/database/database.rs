@@ -6,6 +6,8 @@ use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
+use super::models::DynamicQrResult;
+
 pub struct Database {
     db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
 }
@@ -93,12 +95,9 @@ impl Database {
 
         let created = result.take::<Vec<models::DynamicQrResult>>(0)?;
 
-        if created.is_empty() {
-            Err(ApiError::InternalServerError(
-                "User has no dynamic urls.".to_string(),
-            ))
-        } else {
-            Ok(created)
+        match created.is_empty() {
+            true => Err(ApiError::InternalServerError("No URLs found.".to_string())),
+            false => Ok(created),
         }
     }
 
@@ -184,7 +183,7 @@ impl Database {
         target_url = $target_url, 
         created_at = time::now(), updated_at = time::now()",
             )
-            .bind(("user", format_user_id(user_id.to_string())))
+            .bind(("user", user_id.to_string()))
             .bind(("server_url", dynamic_url.server_url))
             .bind(("target_url", dynamic_url.target_url))
             .await?;
@@ -225,7 +224,7 @@ impl Database {
 
     pub async fn update_dynamic_url(
         &self,
-        server_url: &str,
+        qrcode_id: &str,
         new_target_url: &str,
     ) -> Response<models::DynamicQrResult> {
         /*
@@ -242,8 +241,8 @@ impl Database {
 
         let mut result = self
             .db
-            .query("UPDATE dynamic_url SET target_url = $target_url, updated_at = time::now() WHERE server_url = $server_url")
-            .bind(("server_url", server_url.to_string()))
+            .query("UPDATE dynamic_url SET target_url = $target_url, updated_at = time::now() WHERE id = $id")
+            .bind(("id", qrcode_id.to_string()))
             .bind(("target_url", new_target_url.to_string()))
             .await?;
 
@@ -255,7 +254,7 @@ impl Database {
         }
     }
 
-    pub async fn delete_dynamic_url(&self, id: &str) -> Response<()> {
+    pub async fn delete_dynamic_url(&self, id: &str) -> Response<DynamicQrResult> {
         /*
             Deletes a dynamic URL from the database.
 
@@ -271,7 +270,7 @@ impl Database {
             .await?;
 
         match result.take::<Option<models::DynamicQrResult>>(0)? {
-            Some(_) => Ok(()),
+            Some(deleted) => Ok(deleted),
             None => Err(ApiError::InternalServerError(
                 "Failed to delete url.".to_string(),
             )),
@@ -298,7 +297,7 @@ impl Database {
             .bind(("user", user_id.to_string()))
             .await?;
 
-        match result.take::<Option<models::UserSubscription>>(0)? {
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
             Some(subscription) => Ok(Some(subscription.id.to_string())),
             None => Ok(None),
         }
@@ -308,7 +307,7 @@ impl Database {
         &self,
         user_id: &str,
         subscription: models::UserSubscription,
-    ) -> Response<models::UserSubscription> {
+    ) -> Response<models::UserSubscriptionResult> {
         /*
             Inserts a new user subscription into the database.
 
@@ -332,16 +331,59 @@ impl Database {
             usage = 0, 
             start_date = time::now(), 
             end_date = NONE, 
-            subscription_status = $subscription_status",
+            subscription_status = 'active'",
         )
-        .bind(("subscription_id", subscription.id)).bind(("user", user_id.to_string()))
-        .bind(("tier", subscription.tier))
-        .bind(("subscription_status", subscription.subscription_status)).await?;
+        .bind(("subscription_id", subscription.id))
+        .bind(("user", user_id.to_string()))
+        .bind(("tier", subscription.tier)).await?;
 
-        match result.take::<Option<models::UserSubscription>>(0)? {
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
             Some(created) => Ok(created),
             None => Err(ApiError::InternalServerError(
                 "Failed to create subscription.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn update_subscription(
+        &self,
+        user_id: &str,
+        subscription: models::UpdateUserSubscription,
+    ) -> Response<models::UserSubscriptionResult> {
+        /*
+            Updates a user subscription in the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+                subscription (models::UserSubscription): Contains:
+                    - `tier`: The subscription tier.
+                    - `usage`: The usage count.
+                    - `start_date`: The start date of the subscription.
+                    - `end_date`: The end date of the subscription.
+                    - `subscription_status`: The status of the subscription.
+
+            Returns:
+                Response<models::UserSubscription>: The updated user subscription object.
+
+        */
+
+        let mut result = self
+            .db
+            .query(
+                "UPDATE subscription SET tier = $tier, usage = $usage, start_date = $start_date, end_date = $end_date, subscription_status = $subscription_status WHERE subscription_id = $subscription_id",
+            )
+            .bind(("subscription_id", subscription.id))
+            .bind(("tier", subscription.tier))
+            .bind(("usage", subscription.usage))
+            .bind(("start_date", subscription.start_date))
+            .bind(("end_date", subscription.end_date))
+            .bind(("subscription_status", subscription.subscription_status))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(updated) => Ok(updated),
+            None => Err(ApiError::InternalServerError(
+                "Failed to update subscription.".to_string(),
             )),
         }
     }
