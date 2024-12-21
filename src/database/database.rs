@@ -1,5 +1,3 @@
-use std::f32::consts::E;
-
 use crate::database::models::{self, format_user_id};
 use crate::errors::{ApiError, Response};
 use crate::utils::Environments;
@@ -8,7 +6,7 @@ use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
-use super::models::{DynamicQrResult, UserSubscriptionResult};
+use super::models::{DynamicQrResult, UserResult};
 
 pub struct Database {
     db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
@@ -52,6 +50,11 @@ impl Database {
         DEFINE FIELD username ON user TYPE string ASSERT $value != NONE;
         DEFINE FIELD email ON user TYPE string ASSERT $value != NONE;
         DEFINE FIELD created_at ON user TYPE datetime ASSERT $value != NONE;
+
+        DEFINE TABLE session SCHEMAFULL;
+        DEFINE FIELD id ON session TYPE string ASSERT $value != NONE;
+        DEFINE FIELD session_id ON session TYPE string ASSERT $value != NONE;
+        DEFINE FIELD tier ON session TYPE string ASSERT $value != NONE;
 
         DEFINE TABLE subscription SCHEMAFULL;
         DEFINE FIELD subscription_id ON subscription TYPE string ASSERT $value != NONE;
@@ -310,7 +313,7 @@ impl Database {
         }
     }
 
-    pub async fn lookup_user_from_session(&self, session_id: &str) -> Response<UserSubscriptionResult> {
+    pub async fn lookup_user_from_session(&self, session_id: &str) -> Response<UserResult> {
         /*
             Looks up a user's Auth0 ID from a session ID in the database.
 
@@ -325,105 +328,48 @@ impl Database {
         let mut result = self
             .db
             .query(
-                "SELECT * FROM subscription WHERE session_id = $session_id",
+                "SELECT * FROM user WHERE (SELECT <-subscribed<-user FROM subscription WHERE session_id = $session_id)",
             )
             .bind(("session_id", session_id.to_string()))
             .await?;
 
-        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+        match result.take::<Option<models::UserResult>>(0)? {
             Some(subscription) => Ok(subscription),
-            None => Err(ApiError::InternalServerError(
-                "No user found.".to_string(),
-            )),
+            None => Err(ApiError::InternalServerError("No user found.".to_string())),
         }
     }
 
-    pub async fn insert_subscription(
+    pub async fn insert_session(
         &self,
         user_id: &str,
-        subscription: models::UserSubscription,
-    ) -> Response<models::UserSubscriptionResult> {
+        session: models::PaymentSession,
+    ) -> Response<models::PaymentSessionResult> {
         /*
-            Inserts a new user subscription into the database.
+            Inserts a new session into the database.
 
             Params:
-                user_id (string): The user's Auth0 ID.
-                subscription (models::UserSubscription): Contains:
-                    - `tier`: The subscription tier.
-                    - `usage`: The usage count.
-                    - `start_date`: The start date of the subscription.
-                    - `end_date`: The end date of the subscription.
-                    - `subscription_status`: The status of the subscription.
-
-            Returns:
-                Response<models::UserSubscription>: The inserted user subscription object.
+                session_id (string): The session ID.
+                tier (string): The session's tier.
 
         */
-        let mut result = self.db.query(
-            "
-            LET $user = type::thing('user', $user_id);
-            RELATE $user->subscribed->CREATE type::thing('subscription', $user_id) 
-            SET subscription_id = 'incomplete',
-            session_id = $session_id,
-            tier = $tier, 
-            usage = 0, 
-            start_date = time::now(), 
-            end_date = time::now(), 
-            subscription_status = 'inactive';
+
+        let mut result = self.db
+            .query("
+
+            LET $user = type::thing('session', $user_id);
             
-            SELECT * FROM $user->subscribed->subscription;",
-        )
-        .bind(("user_id", user_id.to_string()))
-        .bind(("session_id", subscription.session_id))
-        .bind(("tier", subscription.tier)).await?;
-
-        match result.take::<Option<models::UserSubscriptionResult>>(2)? {
-            Some(created) => Ok(created),
-            None => Err(ApiError::InternalServerError(
-                "Failed to create subscription.".to_string(),
-            )),
-        }
-    }
-
-    pub async fn update_subscription(
-        &self,
-        user_id: &str,
-        subscription: models::UpdateUserSubscription,
-    ) -> Response<models::UserSubscriptionResult> {
-        /*
-            Updates a user subscription in the database.
-
-            Params:
-                user_id (string): The user's Auth0 ID.
-                subscription (models::UserSubscription): Contains:
-                    - `tier`: The subscription tier.
-                    - `usage`: The usage count.
-                    - `start_date`: The start date of the subscription.
-                    - `end_date`: The end date of the subscription.
-                    - `subscription_status`: The status of the subscription.
-
-            Returns:
-                Response<models::UserSubscription>: The updated user subscription object.
-
-        */
-
-        let mut result = self
-            .db
-            .query(
-                "UPDATE subscription SET tier = $tier, usage = $usage, start_date = $start_date, end_date = $end_date, subscription_status = $subscription_status WHERE subscription_id = $subscription_id",
-            )
-            .bind(("subscription_id", subscription.id))
-            .bind(("tier", subscription.tier))
-            .bind(("usage", subscription.usage))
-            .bind(("start_date", subscription.start_date))
-            .bind(("end_date", subscription.end_date))
-            .bind(("subscription_status", subscription.subscription_status))
+            RELATE $user->payment->CREATE type::thing('session', $session_id) SET session_id = $session_id, tier = $tier;
+            
+            SELECT * FROM $user->payment->session;")
+            .bind(("user", user_id.to_string()))
+            .bind(("session_id", session.session_id))
+            .bind(("tier", session.tier))
             .await?;
 
-        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
-            Some(updated) => Ok(updated),
+        match result.take::<Option<models::PaymentSessionResult>>(2)? {
+            Some(created) => Ok(created),
             None => Err(ApiError::InternalServerError(
-                "Failed to update subscription.".to_string(),
+                "Failed to create session.".to_string(),
             )),
         }
     }

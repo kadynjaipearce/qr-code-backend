@@ -18,6 +18,18 @@ pub struct UserResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct PaymentSession {
+    pub session_id: String,
+    pub tier: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaymentSessionResult {
+    pub session_id: String,
+    pub tier: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserSubscription {
     pub session_id: String,
     pub tier: String,
