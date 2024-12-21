@@ -328,7 +328,7 @@ impl Database {
         let mut result = self
             .db
             .query(
-                "SELECT * FROM user WHERE (SELECT <-subscribed<-user FROM subscription WHERE session_id = $session_id)",
+                "SELECT * FROM user WHERE (SELECT <-payment<-user FROM session WHERE session_id = $session_id) LIMIT 1;",
             )
             .bind(("session_id", session_id.to_string()))
             .await?;
@@ -360,7 +360,7 @@ impl Database {
             
             RELATE $user->payment->CREATE type::thing('session', $session_id) SET session_id = $session_id, tier = $tier;
             
-            SELECT * FROM $user->payment->session;")
+            SELECT * FROM $user->payment->session LIMIT 1;")
             .bind(("user", user_id.to_string()))
             .bind(("session_id", session.session_id))
             .bind(("tier", session.tier))
