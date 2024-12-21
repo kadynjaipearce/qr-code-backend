@@ -51,15 +51,17 @@ pub async fn create_qrcodes(
         return Err(ApiError::Unauthorized);
     }
 
-    let url = db
-        .insert_dynamic_url(&user_id, qrcode.into_inner())
-        .await?;
+    let url = db.insert_dynamic_url(&user_id, qrcode.into_inner()).await?;
 
     Ok(json!({"dynamic_url": url}))
 }
 
 #[get("/user/<user_id>/qrcode")]
-pub async fn read_qrcodes(token: Claims, user_id: &str, db: &State<Database>) -> Response<Json<ApiResponse>> {
+pub async fn read_qrcodes(
+    token: Claims,
+    user_id: &str,
+    db: &State<Database>,
+) -> Response<Json<ApiResponse>> {
     if !token.has_permissions(&["read:dynamicqr"]) {
         return Err(ApiError::Unauthorized);
     }
@@ -68,9 +70,7 @@ pub async fn read_qrcodes(token: Claims, user_id: &str, db: &State<Database>) ->
         return Err(ApiError::Unauthorized);
     }
 
-    let urls = db
-        .list_user_urls(&user_id)
-        .await?;
+    let urls = db.list_user_urls(&user_id).await?;
 
     Ok(Json(ApiResponse {
         status: Status::Ok.code,
@@ -79,7 +79,11 @@ pub async fn read_qrcodes(token: Claims, user_id: &str, db: &State<Database>) ->
     }))
 }
 
-#[put("/user/<user_id>/qrcode/<qrcode_id>", format = "json", data = "<qrcode>")]
+#[put(
+    "/user/<user_id>/qrcode/<qrcode_id>",
+    format = "json",
+    data = "<qrcode>"
+)]
 pub async fn update_qrcodes(
     token: Claims,
     db: &State<Database>,

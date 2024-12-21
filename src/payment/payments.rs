@@ -4,6 +4,7 @@ use crate::database::database::Database;
 use crate::database::models::{format_user_id, UserSubscription};
 use crate::errors::{ApiError, ApiResponse, Response};
 use crate::routes::guard::Claims;
+use crate::routes::user;
 use crate::utils::Environments;
 
 use rocket::data::{FromData, ToByteUnit};
@@ -22,15 +23,15 @@ use stripe::{EventType, Webhook};
 
 use crate::payment::models::PaymentRequest;
 
-#[post("/subscription/<user>/create", format = "json", data = "<payment>")]
+#[post("/subscription/<user_id>", format = "json", data = "<payment>")]
 pub async fn create_checkout_session(
     token: Claims,
     payment: Json<PaymentRequest>,
     db: &State<Database>,
-    user: &str,
+    user_id: &str,
     stripe: &State<Client>,
-    env: &State<Environments>,
-) -> Response<Value> {
+    secrets: &State<Environments>,
+) -> Response<Json<ApiResponse>> {
     /*
         Creates a new checkout session for a payment.
 
@@ -42,7 +43,11 @@ pub async fn create_checkout_session(
 
     */
 
-    let user = match db.select_user(&format_user_id(token.sub)).await? {
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let user = match db.select_user(&user_id).await? {
         Some(user) => user,
         None => return Err(ApiError::NotFound),
     };
@@ -76,8 +81,8 @@ pub async fn create_checkout_session(
             mode: Some(stripe::CheckoutSessionMode::Subscription),
             line_items: Some(vec![stripe::CreateCheckoutSessionLineItems {
                 price: match payment.tier.as_str() {
-                    "pro" => Some(env.get("STRIPE_PRODUCT_PRO")),
-                    "lite" => Some(env.get("STRIPE_PRODUCT_LITE")),
+                    "pro" => Some(secrets.get("STRIPE_PRODUCT_PRO")),
+                    "lite" => Some(secrets.get("STRIPE_PRODUCT_LITE")),
                     _ => return Err(ApiError::BadRequest),
                 },
                 quantity: Some(1),
@@ -89,16 +94,22 @@ pub async fn create_checkout_session(
     )
     .await?;
 
-    // return the checkout session url.
+    db.insert_subscription(&user_id, UserSubscription {
+        session_id: session.id.to_string(),
+        tier: payment.into_inner().tier,
+    }).await?;
 
-    Ok(json!({
-        "session_url": session.url,
-        "session_id": session.id,
-    }))
+   
+
+    Ok((Json(ApiResponse {
+        status: Status::Created.code,
+        message: "Checkout session created. ".to_string(),
+        data: json!(session.url),
+    })))
 }
 
 #[put(
-    "/subscription/<user>/update",
+    "/subscription/<user>",
     format = "json",
     data = "<subscription>"
 )]
@@ -152,8 +163,7 @@ pub async fn update_subscription(
     Ok(json!({"message": "Subscription updated."}))
 }
 
-
-#[delete("/subscription/<user_id>/cancel", format = "json")]
+#[delete("/subscription/<user_id>", format = "json")]
 pub async fn cancel_subscription(
     token: Claims,
     user_id: &str,
@@ -193,7 +203,7 @@ pub async fn cancel_subscription(
 
     match result {
         Ok(data) => Ok(Json(ApiResponse {
-            status: 200,
+            status: Status::Ok.code,
             message: "Subscription cancelled. ".to_string(),
             data: json!(data),
         })),
@@ -203,7 +213,6 @@ pub async fn cancel_subscription(
         }
     }
 }
-
 
 #[post("/stripe/webhook", format = "json", data = "<payload>")]
 pub async fn stripe_webhook(
@@ -233,18 +242,24 @@ pub async fn stripe_webhook(
     ) {
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
-                if let EventObject::CheckoutSession(session) = event.data.object {
-                    let user = session.client_reference_id.expect("Failed to get session id. ");
+                /* if let EventObject::CheckoutSession(session) = event.data.object {
+                    let user = session.client_reference_id.unwrap_or("google_oauth2_103365148753481340229".to_string());
 
                     let subscription = session.subscription.unwrap().clone();
                     let subscription_obj = subscription.as_object().unwrap();
 
-                    let pro= &secrets.get("STRIPE_PRODUCT_PRO");
-                    let lite= &secrets.get("STRIPE_PRODUCT_LITE");
+                    let pro = &secrets.get("STRIPE_PRODUCT_PRO");
+                    let lite = &secrets.get("STRIPE_PRODUCT_LITE");
 
-                    let new_subscription = UserSubscription{
+                    let new_subscription = UserSubscription {
                         id: subscription_obj.id.to_string(),
-                        tier: match subscription_obj.items.data[0].price.as_ref().unwrap().id.as_str() {
+                        tier: match subscription_obj.items.data[0]
+                            .price
+                            .as_ref()
+                            .unwrap()
+                            .id
+                            .as_str()
+                        {
                             id if id == *pro => "pro".to_string(),
                             id if id == *lite => "lite".to_string(),
                             _ => return Err(ApiError::BadRequest),
@@ -252,23 +267,26 @@ pub async fn stripe_webhook(
                     };
 
                     match db.insert_subscription(&user, new_subscription).await {
-                        Ok(_) => {
-                           
-                           unimplemented!()
+                        Ok(created) => {
+                            return Ok(Json(ApiResponse {
+                                status: Status::Created.code,
+                                message: "Subscription created. ".to_string(),
+                                data: json!(created),
+                            }))
                         }
                         Err(err) => {
                             eprintln!("Error inserting subscription: {:?}", err);
                             return Err(ApiError::InternalServerError(err.to_string()));
                         }
                     }
+                } else {
+                    return Err(ApiError::BadRequest);
+                } */
 
-
-                }
-
-                
+               println!("Checkout session completed: {:?}", event);
 
                 unimplemented!()
-                
+
             }
 
             EventType::CustomerSubscriptionCreated => {
@@ -294,11 +312,13 @@ pub async fn stripe_webhook(
 
                 unimplemented!()
             }
-            _ => return Ok(Json(ApiResponse {
-                status: Status::PartialContent.code,
-                message: "Event received. ".to_string(),
-                data: json!(event),
-            })),
+            _ => {
+                return Ok(Json(ApiResponse {
+                    status: Status::PartialContent.code,
+                    message: "Event received. ".to_string(),
+                    data: json!(event),
+                }))
+            }
         }
     } else {
         panic!("Error verifying stripe signature. ");

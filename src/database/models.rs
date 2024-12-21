@@ -18,8 +18,8 @@ pub struct UserResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct UserSubscription{
-    pub id: String,
+pub struct UserSubscription {
+    pub session_id: String,
     pub tier: String,
 }
 
