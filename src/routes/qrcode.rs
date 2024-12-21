@@ -1,9 +1,9 @@
 use crate::database::database::Database;
 use crate::errors::Response;
 
+use rocket::get;
 use rocket::response::Redirect;
 use rocket::State;
-use rocket::get;
 
 #[get("/scan/<server_url>")]
 pub async fn scan(server_url: &str, db: &State<Database>) -> Response<Redirect> {

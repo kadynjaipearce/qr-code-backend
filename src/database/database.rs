@@ -1,3 +1,5 @@
+use std::f32::consts::E;
+
 use crate::database::models::{self, format_user_id};
 use crate::errors::{ApiError, Response};
 use crate::utils::Environments;
@@ -6,7 +8,7 @@ use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
-use super::models::DynamicQrResult;
+use super::models::{DynamicQrResult, UserSubscriptionResult};
 
 pub struct Database {
     db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
@@ -53,6 +55,7 @@ impl Database {
 
         DEFINE TABLE subscription SCHEMAFULL;
         DEFINE FIELD subscription_id ON subscription TYPE string ASSERT $value != NONE;
+        DEFINE FIELD session_id ON subscription TYPE string ASSERT $value != NONE;
         DEFINE FIELD tier ON subscription TYPE string ASSERT $value != NONE;
         DEFINE FIELD start_date ON subscription TYPE datetime ASSERT $value != NONE;
         DEFINE FIELD end_date ON subscription TYPE datetime;
@@ -178,17 +181,21 @@ impl Database {
             .db
             .query(
                 "
-        RELATE type::thing('user', $user)->created->CREATE type::thing('dynamic_url', uuid()) 
+                LET $user = type::thing('user', $user_id)
+                
+        RELATE $user->created->CREATE type::thing('dynamic_url', uuid()) 
         SET server_url = $server_url, 
         target_url = $target_url, 
-        created_at = time::now(), updated_at = time::now()",
+        created_at = time::now(), updated_at = time::now();
+        
+        SELECT * FROM $user->created->dynamic_url;",
             )
-            .bind(("user", user_id.to_string()))
+            .bind(("user_id", user_id.to_string()))
             .bind(("server_url", dynamic_url.server_url))
             .bind(("target_url", dynamic_url.target_url))
             .await?;
 
-        match result.take::<Option<models::DynamicQrResult>>(0)? {
+        match result.take::<Option<models::DynamicQrResult>>(2)? {
             Some(created) => Ok(created),
             None => Err(ApiError::InternalServerError(
                 "Failed to create dynamic URL.".to_string(),
@@ -303,6 +310,34 @@ impl Database {
         }
     }
 
+    pub async fn lookup_user_from_session(&self, session_id: &str) -> Response<UserSubscriptionResult> {
+        /*
+            Looks up a user's Auth0 ID from a session ID in the database.
+
+            Params:
+                session_id (string): The session ID to look up.
+
+            Returns:
+                Response<Option<String>>: The user's Auth0 ID, or None if no user was found.
+
+        */
+
+        let mut result = self
+            .db
+            .query(
+                "SELECT * FROM subscription WHERE session_id = $session_id",
+            )
+            .bind(("session_id", session_id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(subscription) => Ok(subscription),
+            None => Err(ApiError::InternalServerError(
+                "No user found.".to_string(),
+            )),
+        }
+    }
+
     pub async fn insert_subscription(
         &self,
         user_id: &str,
@@ -325,19 +360,24 @@ impl Database {
 
         */
         let mut result = self.db.query(
-            "RELATE type::thing('user', $user)->subscribed->CREATE type::thing('subscription', $user) 
-            SET subscription_id = $subscription_id,
+            "
+            LET $user = type::thing('user', $user_id);
+            RELATE $user->subscribed->CREATE type::thing('subscription', $user_id) 
+            SET subscription_id = 'incomplete',
+            session_id = $session_id,
             tier = $tier, 
             usage = 0, 
             start_date = time::now(), 
-            end_date = NONE, 
-            subscription_status = 'active'",
+            end_date = time::now(), 
+            subscription_status = 'inactive';
+            
+            SELECT * FROM $user->subscribed->subscription;",
         )
-        .bind(("subscription_id", subscription.id))
-        .bind(("user", user_id.to_string()))
+        .bind(("user_id", user_id.to_string()))
+        .bind(("session_id", subscription.session_id))
         .bind(("tier", subscription.tier)).await?;
 
-        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+        match result.take::<Option<models::UserSubscriptionResult>>(2)? {
             Some(created) => Ok(created),
             None => Err(ApiError::InternalServerError(
                 "Failed to create subscription.".to_string(),
