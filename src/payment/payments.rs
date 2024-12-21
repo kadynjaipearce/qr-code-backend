@@ -237,19 +237,19 @@ pub async fn stripe_webhook(
     ) {
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
-                print!("Checkout session completed: {:?}", &event);
+       
                 if let EventObject::CheckoutSession(session) = event.data.object {
+                    
                     let user = db.lookup_user_from_session(&session.id).await?;
 
-                    print!("Checkout session completed: {:?}", session.id);
+                    println!("Checkout session completed: {:?}, Related user: {:?}. ", session.id, user.id);
 
-                    println!("Checkout session completed: {:?}", user.id);
-                    
+
+                    unimplemented!();     
                 } else {
-                    return Err(ApiError::BadRequest);
+                    println!("Checkout session completed: {:?}", event.data.object);
+                    Err(ApiError::BadRequest)
                 }
-
-                unimplemented!()
             }
 
             EventType::CustomerSubscriptionCreated => {
