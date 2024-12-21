@@ -1,10 +1,9 @@
 use std::str::FromStr;
 
 use crate::database::database::Database;
-use crate::database::models::{format_user_id, UserSubscription};
+use crate::database::models::{format_user_id, PaymentSession, UserSubscription};
 use crate::errors::{ApiError, ApiResponse, Response};
 use crate::routes::guard::Claims;
-use crate::routes::user;
 use crate::utils::Environments;
 
 use rocket::data::{FromData, ToByteUnit};
@@ -16,10 +15,8 @@ use rocket::{delete, get, post, put};
 use serde_json::json;
 
 use rocket::http::Status;
-use stripe::generated::core::token;
-use stripe::{CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject};
+use stripe::{CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType, Webhook};
 use stripe::{Client, Subscription, SubscriptionId};
-use stripe::{EventType, Webhook};
 
 use crate::payment::models::PaymentRequest;
 
@@ -94,25 +91,23 @@ pub async fn create_checkout_session(
     )
     .await?;
 
-    db.insert_subscription(&user_id, UserSubscription {
-        session_id: session.id.to_string(),
-        tier: payment.into_inner().tier,
-    }).await?;
+    db.insert_session(
+        user_id,
+        PaymentSession {
+            session_id: session.id.to_string(),
+            tier: payment.tier.clone(),
+        },
+    )
+    .await?;
 
-   
-
-    Ok((Json(ApiResponse {
+    Ok(Json(ApiResponse {
         status: Status::Created.code,
         message: "Checkout session created. ".to_string(),
         data: json!(session.url),
-    })))
+    }))
 }
 
-#[put(
-    "/subscription/<user>",
-    format = "json",
-    data = "<subscription>"
-)]
+#[put("/subscription/<user>", format = "json", data = "<subscription>")]
 pub async fn update_subscription(
     token: Claims,
     user: &str,
@@ -242,55 +237,28 @@ pub async fn stripe_webhook(
     ) {
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
-                /* if let EventObject::CheckoutSession(session) = event.data.object {
-                    let user = session.client_reference_id.unwrap_or("google_oauth2_103365148753481340229".to_string());
+                print!("Checkout session completed: {:?}", &event);
+                if let EventObject::CheckoutSession(session) = event.data.object {
+                    let user = db.lookup_user_from_session(&session.id).await?;
 
-                    let subscription = session.subscription.unwrap().clone();
-                    let subscription_obj = subscription.as_object().unwrap();
+                    print!("Checkout session completed: {:?}", session.id);
 
-                    let pro = &secrets.get("STRIPE_PRODUCT_PRO");
-                    let lite = &secrets.get("STRIPE_PRODUCT_LITE");
-
-                    let new_subscription = UserSubscription {
-                        id: subscription_obj.id.to_string(),
-                        tier: match subscription_obj.items.data[0]
-                            .price
-                            .as_ref()
-                            .unwrap()
-                            .id
-                            .as_str()
-                        {
-                            id if id == *pro => "pro".to_string(),
-                            id if id == *lite => "lite".to_string(),
-                            _ => return Err(ApiError::BadRequest),
-                        },
-                    };
-
-                    match db.insert_subscription(&user, new_subscription).await {
-                        Ok(created) => {
-                            return Ok(Json(ApiResponse {
-                                status: Status::Created.code,
-                                message: "Subscription created. ".to_string(),
-                                data: json!(created),
-                            }))
-                        }
-                        Err(err) => {
-                            eprintln!("Error inserting subscription: {:?}", err);
-                            return Err(ApiError::InternalServerError(err.to_string()));
-                        }
-                    }
+                    println!("Checkout session completed: {:?}", user.id);
+                    
                 } else {
                     return Err(ApiError::BadRequest);
-                } */
-
-               println!("Checkout session completed: {:?}", event);
+                }
 
                 unimplemented!()
-
             }
 
             EventType::CustomerSubscriptionCreated => {
-                println!("Customer subscription created: {:?}", event);
+    
+                if let EventObject::Subscription(subscription) = event.data.object {
+                    unimplemented!("CUSTOMER SUBSCRIPTION CREATED");
+                } else {
+                    return Err(ApiError::BadRequest);
+                }
 
                 unimplemented!()
             }
