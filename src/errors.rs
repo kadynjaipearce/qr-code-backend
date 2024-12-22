@@ -49,7 +49,7 @@ impl fmt::Display for ApiError {
             ApiError::NotFound => write!(f, "Not Found"),
             ApiError::Unauthorized => write!(f, "Unauthorized"),
             ApiError::InternalServerError(ref message) => {
-                write!(f, "Internal Server Error: {}", message)
+                write!(f, "Internal Server Error: {:?}", message)
             }
         }
     }

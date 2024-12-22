@@ -55,10 +55,10 @@ impl Database {
         DEFINE FIELD id ON session TYPE string ASSERT $value != NONE;
         DEFINE FIELD session_id ON session TYPE string ASSERT $value != NONE;
         DEFINE FIELD tier ON session TYPE string ASSERT $value != NONE;
+        DEFINE FIELD created_at ON session TYPE datetime ASSERT $value != NONE; 
 
         DEFINE TABLE subscription SCHEMAFULL;
         DEFINE FIELD subscription_id ON subscription TYPE string ASSERT $value != NONE;
-        DEFINE FIELD session_id ON subscription TYPE string ASSERT $value != NONE;
         DEFINE FIELD tier ON subscription TYPE string ASSERT $value != NONE;
         DEFINE FIELD start_date ON subscription TYPE datetime ASSERT $value != NONE;
         DEFINE FIELD end_date ON subscription TYPE datetime;
@@ -313,6 +313,35 @@ impl Database {
         }
     }
 
+    pub async fn lookup_user_from_subscription(
+        &self,
+        subscription_id: &str,
+    ) -> Response<UserResult> {
+        /*
+            Looks up a user's Auth0 ID from a subscription ID in the database.
+
+            Params:
+                subscription_id (string): The subscription ID to look up.
+
+            Returns:
+                Response<Option<String>>: The user's Auth0 ID, or None if no user was found.
+
+        */
+
+        let mut result = self
+            .db
+            .query(
+                "SELECT * FROM user WHERE (SELECT <-subscribed<-user FROM subscription WHERE subscription_id = $subscription_id) LIMIT 1;",
+            )
+            .bind(("subscription_id", subscription_id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::UserResult>>(0)? {
+            Some(subscription) => Ok(subscription),
+            None => Err(ApiError::InternalServerError("No user found.".to_string())),
+        }
+    }
+
     pub async fn lookup_user_from_session(&self, session_id: &str) -> Response<UserResult> {
         /*
             Looks up a user's Auth0 ID from a session ID in the database.
@@ -358,9 +387,9 @@ impl Database {
 
             LET $user = type::thing('session', $user_id);
             
-            RELATE $user->payment->CREATE type::thing('session', $session_id) SET session_id = $session_id, tier = $tier;
+            RELATE $user->payment->CREATE type::thing('session', $session_id) SET session_id = $session_id, tier = $tier, created_at = time::now();
             
-            SELECT * FROM $user->payment->session LIMIT 1;")
+            SELECT * FROM $user->payment->session ORDER BY created_at DESC LIMIT 1;")
             .bind(("user", user_id.to_string()))
             .bind(("session_id", session.session_id))
             .bind(("tier", session.tier))
@@ -370,6 +399,48 @@ impl Database {
             Some(created) => Ok(created),
             None => Err(ApiError::InternalServerError(
                 "Failed to create session.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn insert_subscription(
+        &self,
+        user_id: &str,
+        subscription: models::UserSubscription,
+    ) -> Response<models::UserSubscriptionResult> {
+        /*
+            Inserts a new subscription into the database.
+
+            Params:
+                subscription_id (string): The subscription ID.
+                tier (string): The subscription's tier.
+                start_date (datetime): The subscription's start date.
+                end_date (datetime): The subscription's end date.
+                usage (int): The subscription's usage.
+                subscription_status (string): The subscription's status.
+
+        */
+
+        let mut result = self
+            .db
+            .query("
+
+            LET $user = type::thing('user', $user_id);
+            
+            RELATE $user->subscribed->CREATE type::thing('subscription', $subscription_id) 
+            SET subscription_id = $subscription_id, tier = $tier, start_date = time::now(), end_date = time::now(), usage = 0, subscription_status = $subscription_status;
+            
+            SELECT * FROM $user->subscribed->subscription LIMIT 1;")
+            .bind(("user_id", user_id.to_string()))
+            .bind(("subscription_id", subscription.sub_id))
+            .bind(("tier", subscription.tier))
+            .bind(("subscription_status", subscription.status))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(2)? {
+            Some(created) => Ok(created),
+            None => Err(ApiError::InternalServerError(
+                "Failed to create subscription.".to_string(),
             )),
         }
     }

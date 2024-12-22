@@ -15,7 +15,10 @@ use rocket::{delete, get, post, put};
 use serde_json::json;
 
 use rocket::http::Status;
-use stripe::{CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType, Webhook};
+use stripe::{
+    CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
+    Webhook,
+};
 use stripe::{Client, Subscription, SubscriptionId};
 
 use crate::payment::models::PaymentRequest;
@@ -237,15 +240,34 @@ pub async fn stripe_webhook(
     ) {
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
-       
                 if let EventObject::CheckoutSession(session) = event.data.object {
+                    let session_obj = session.clone();
+
+                    let user = db.lookup_user_from_session(&session_obj.id).await?;
+
+                    let subscription = match &session_obj.subscription {
+                        Some(sub) => UserSubscription {
+                            sub_id: sub.id().to_string(),
+                            tier: "pro".to_string(),
+                            status: session_obj.status.unwrap().to_string(), // Safe unwrap for status
+                        },
+                        None => {
+                            println!("Error: Subscription is None, cannot proceed");
+                            return Err(ApiError::BadRequest); // Return an error if subscription is None
+                        }
+                    };
+
+                    match db.insert_subscription(&user.id.key().to_string(), subscription).await {
+                        Ok(_) => {
+                            unimplemented!("YESSSSSSSSSSSSSSSSSSSS")
+                        }
+                        Err(error) => {
+                            unimplemented!("Error inserting subscription: {:?}", error);
+                            return Err(ApiError::InternalServerError(error.to_string()));
+                        }
+                    };
                     
-                    let user = db.lookup_user_from_session(&session.id).await?;
-
-                    println!("Checkout session completed: {:?}, Related user: {:?}. ", session.id, user.id);
-
-
-                    unimplemented!();     
+                    unimplemented!("Session completed. {:?}", user.id);
                 } else {
                     println!("Checkout session completed: {:?}", event.data.object);
                     Err(ApiError::BadRequest)
@@ -253,7 +275,6 @@ pub async fn stripe_webhook(
             }
 
             EventType::CustomerSubscriptionCreated => {
-    
                 if let EventObject::Subscription(subscription) = event.data.object {
                     unimplemented!("CUSTOMER SUBSCRIPTION CREATED");
                 } else {
@@ -276,9 +297,13 @@ pub async fn stripe_webhook(
             }
 
             EventType::CustomerSubscriptionDeleted => {
-                println!("Customer subscription deleted: {:?}", event);
+                if let EventObject::Subscription(subscription) = event.data.object {
+                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
 
-                unimplemented!()
+                    unimplemented!("Customer subscription deleted. {:?}", user.id);
+                } else {
+                    return Err(ApiError::BadRequest);
+                }
             }
             _ => {
                 return Ok(Json(ApiResponse {

@@ -31,8 +31,9 @@ pub struct PaymentSessionResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSubscription {
-    pub session_id: String,
+    pub sub_id: String,
     pub tier: String,
+    pub status: String,
 }
 
 pub struct UpdateUserSubscription {
