@@ -53,7 +53,7 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
                 routes::user::delete_qrcodes,
                 payment::payments::stripe_webhook,
                 payment::payments::create_checkout_session,
-                payment::payments::cancel_subscription,   
+                payment::payments::cancel_subscription,
             ],
         )
         .attach(cors)

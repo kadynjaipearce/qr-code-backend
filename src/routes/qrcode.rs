@@ -1,13 +1,9 @@
 use crate::database::database::Database;
-use crate::database::models::{self, format_user_id};
-use crate::errors::{ApiError, Response};
-use crate::routes::guard::Claims;
+use crate::errors::Response;
 
+use rocket::get;
 use rocket::response::Redirect;
-use rocket::serde::{json::Json, json::Value};
-use rocket::{form, put, uri, State};
-use rocket::{get, post};
-use serde_json::json;
+use rocket::State;
 
 #[get("/scan/<server_url>")]
 pub async fn scan(server_url: &str, db: &State<Database>) -> Response<Redirect> {
@@ -22,7 +18,7 @@ pub async fn scan(server_url: &str, db: &State<Database>) -> Response<Redirect> 
 
     */
 
-    let url = db.lookup_dynamic_url(&server_url.to_string()).await?;
+    let url = db.lookup_dynamic_url(&server_url).await?;
 
     if url.contains("Https://") || url.contains("http://") {
         return Ok(Redirect::to(url));

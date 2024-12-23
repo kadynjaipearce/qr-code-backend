@@ -1,141 +1,36 @@
 use std::str::FromStr;
 
 use crate::database::database::Database;
-use crate::database::models::format_user_id;
-use crate::errors::{ApiError, Response};
+use crate::database::models::{format_user_id, PaymentSession, UserSubscription};
+use crate::errors::{ApiError, ApiResponse, Response};
 use crate::routes::guard::Claims;
+use crate::utils::Environments;
 
 use rocket::data::{FromData, ToByteUnit};
 use rocket::outcome::Outcome;
 use rocket::request::FromRequest;
 use rocket::serde::{json::Json, json::Value};
 use rocket::State;
-use rocket::{delete, post};
+use rocket::{delete, get, post, put};
 use serde_json::json;
 
-use stripe::{CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer};
-use stripe::{Client, Subscription, SubscriptionId};
 use rocket::http::Status;
-use stripe::{EventType, Webhook};
+use stripe::{
+    CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType, Object, Webhook
+};
+use stripe::{Client, Subscription, SubscriptionId};
 
 use crate::payment::models::PaymentRequest;
 
-#[post(
-    "/subscription/create/<user>",
-    format = "json",
-    data = "<subscription>"
-)]
-pub async fn create_subscription(
-    token: Claims,
-    user: &str,
-    subscription: Json<Subscription>,
-    db: &State<Database>,
-    stripe: &State<Client>,
-) -> Response<Value> {
-    /*
-        Updates a subscription for a user.
-
-        Params:
-            subscription: subscription object containing the subscription details.
-
-        Returns:
-            Response<Value>: the updated subscription object in a json response.
-
-    */
-
-    // get the user from the database.
-
-    match user == token.sub {
-        false => return Err(ApiError::Unauthorized),
-        true => {
-            let user = !unimplemented!(); // todo: get user subscription from the database.
-
-            Subscription::update(
-                &stripe,
-                &SubscriptionId::from_str(user).unwrap(),
-                stripe::UpdateSubscription {
-                    items: Some(vec![
-                        stripe::UpdateSubscriptionItems {
-                            id: Some("".to_string()),
-                            deleted: Some(true),
-                            ..Default::default()
-                        },
-                        stripe::UpdateSubscriptionItems {
-                            price: Some("".to_string()),
-                            quantity: Some(1),
-                            ..Default::default()
-                        },
-                    ]),
-                    ..Default::default()
-                },
-            )
-            .await?;
-
-            Ok(json!({"message": "Subscription updated."}))
-        }
-    }
-}
-
-// test comment
-
-#[delete("/subscription/cancel/<id>", format = "json")]
-pub async fn cancel_subscription(
-    token: Claims,
-    id: &str,
-    db: &State<Database>,
-    stripe: &State<Client>,
-) -> Response<Value> {
-    /*
-        Cancels a subscription for a user.
-
-        Params:
-            subscription: subscription object containing the subscription details.
-
-        Returns:
-            Response<Value>: the cancelled subscription object in a json response.
-
-    */
-
-    // get the user from the database.
-
-    if id != format_user_id(token.sub) {
-        return Err(ApiError::Unauthorized);
-    }
-
-    let user_id = db.lookup_subscription_id(&id).await?;
-
-    let result = Subscription::cancel(
-        &stripe,
-        &SubscriptionId::from_str("sub_1QURyaHWw3wpkqUxbBy7nPxf").unwrap(),
-        stripe::CancelSubscription {
-            prorate: Some(true),
-            invoice_now: Some(true),
-            ..Default::default()
-        },
-    )
-    .await;
-
-    match result {
-        Ok(data) => Ok(json!({"message": "Subscription cancelled.", "data": data})),
-        Err(err) => {
-            eprintln!("Error cancelling subscription: {:?}", err);
-            return Err(ApiError::InternalServerError(err.to_string()));
-        }
-    }
-}
-
-#[post(
-    "/subscription/create_checkout_session",
-    format = "json",
-    data = "<payment>"
-)]
+#[post("/subscription/<user_id>", format = "json", data = "<payment>")]
 pub async fn create_checkout_session(
     token: Claims,
     payment: Json<PaymentRequest>,
     db: &State<Database>,
+    user_id: &str,
     stripe: &State<Client>,
-    env: &State<crate::utils::Environments>,
-) -> Response<Value> {
+    secrets: &State<Environments>,
+) -> Response<Json<ApiResponse>> {
     /*
         Creates a new checkout session for a payment.
 
@@ -147,7 +42,11 @@ pub async fn create_checkout_session(
 
     */
 
-    let user = match db.select_user(&format_user_id(token.sub)).await? {
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let user = match db.select_user(&user_id).await? {
         Some(user) => user,
         None => return Err(ApiError::NotFound),
     };
@@ -177,44 +76,139 @@ pub async fn create_checkout_session(
             cancel_url: Some("http://localhost:4200/cancel"),
             success_url: Some("http://localhost:4200/success"),
             customer: Some(customer.id),
+            client_reference_id: Some(&payment.tier.to_string()),
             mode: Some(stripe::CheckoutSessionMode::Subscription),
             line_items: Some(vec![stripe::CreateCheckoutSessionLineItems {
                 price: match payment.tier.as_str() {
-                    "pro" => Some(env.get("STRIPE_PRODUCT_PRO")),
-                    "lite" => Some(env.get("STRIPE_PRODUCT_LITE")),
+                    "Pro" => Some(secrets.get("STRIPE_PRODUCT_PRO")),
+                    "Lite" => Some(secrets.get("STRIPE_PRODUCT_LITE")),
                     _ => return Err(ApiError::BadRequest),
                 },
                 quantity: Some(1),
                 ..Default::default()
             }]),
+
             expand: &["line_items", "line_items.data.price.product"],
             ..Default::default()
         },
     )
     .await?;
 
-    // return the checkout session url.
+    db.insert_session(
+        user_id,
+        PaymentSession {
+            session_id: session.id.to_string(),
+            tier: payment.tier.clone(),
+        },
+    )
+    .await?;
 
-    Ok(json!({
-        "session_url": session.url,
-        "session_id": session.id,
+    Ok(Json(ApiResponse {
+        status: Status::Created.code,
+        message: "Checkout session created. ".to_string(),
+        data: json!(session.url),
     }))
 }
 
-// todo: implement webhook to update user subscription status.
+#[put("/subscription/<user>", format = "json", data = "<subscription>")]
+pub async fn update_subscription(
+    token: Claims,
+    user: &str,
+    subscription: Json<Subscription>,
+    db: &State<Database>,
+    stripe: &State<Client>,
+) -> Response<Value> {
+    /*
+        Updates a subscription for a user.
 
-/*
-    impl: webhook to catch new subscription events.
+        Params:
+            subscription: subscription object containing the subscription details.
 
-    then impl: event handler for CheckoutSessionCompleted
-*/
+        Returns:
+            Response<Value>: the updated subscription object in a json response.
+
+    */
+
+    if user != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    Subscription::update(
+        &stripe,
+        &SubscriptionId::from_str(user).unwrap(),
+        stripe::UpdateSubscription {
+            items: Some(vec![
+                stripe::UpdateSubscriptionItems {
+                    id: Some("".to_string()),
+                    deleted: Some(true),
+                    ..Default::default()
+                },
+                stripe::UpdateSubscriptionItems {
+                    price: Some("".to_string()),
+                    quantity: Some(1),
+                    ..Default::default()
+                },
+            ]),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    Ok(json!({"message": "Subscription updated."}))
+}
+
+#[delete("/subscription/<user_id>", format = "json")]
+pub async fn cancel_subscription(
+    token: Claims,
+    user_id: &str,
+    db: &State<Database>,
+    stripe: &State<Client>,
+) -> Response<Json<ApiResponse>> {
+    /*
+        Cancels a subscription for a user.
+
+        Params:
+            subscription: subscription object containing the subscription details.
+
+        Returns:
+            Response<Value>: the cancelled subscription object in a json response.
+
+    */
+
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let subscription_id = match db.lookup_subscription_id(&user_id).await? {
+        Some(id) => id,
+        None => return Err(ApiError::NotFound),
+    };
+
+    let result = Subscription::cancel(
+        &stripe,
+        &SubscriptionId::from_str(&subscription_id).unwrap(),
+        stripe::CancelSubscription {
+            prorate: Some(true),
+            invoice_now: Some(true),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    Ok(Json(ApiResponse {
+        status: Status::Ok.code,
+        message: "Subscription cancelled. ".to_string(),
+        data: json!({"cancelled": result}),
+    }))
+}
 
 #[post("/stripe/webhook", format = "json", data = "<payload>")]
 pub async fn stripe_webhook(
     stripe_signature: StripeSignature<'_>,
+    db: &State<Database>,
     payload: Payload,
     secrets: &State<crate::utils::Environments>,
-) -> Response<Value> {
+) -> Response<Json<ApiResponse>> {
     /*
         Stripe webhook to catch new subscription events.
 
@@ -229,42 +223,91 @@ pub async fn stripe_webhook(
 
     // verify the stripe signature.
 
-    if let Ok(event) = Webhook::construct_event(&payload.contents, stripe_signature.signature, &secrets.get("STRIPE_WEBHOOK_SECRET")) {
+    if let Ok(event) = Webhook::construct_event(
+        &payload.contents,
+        stripe_signature.signature,
+        &secrets.get("STRIPE_WEBHOOK_SECRET"),
+    ) {
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
-                println!("Checkout session completed: {:?}", event);
+                if let EventObject::CheckoutSession(session) = event.data.object {
+                    let user = db.lookup_user_from_session(&session.id).await?;
 
-                unimplemented!()
-            },
+                    let _subscription = match &session.subscription {
+                        Some(sub) => {
+                            let subscription = db
+                                .insert_subscription(
+                                    &user.id.key().to_string(),
+                                    UserSubscription {
+                                        sub_id: sub.id().to_string(),
+                                        tier: session.client_reference_id.unwrap().to_string(),
+                                        status: session.status.unwrap().to_string(),
+                                    },
+                                )
+                                .await?;
+
+                            return Ok(Json(ApiResponse {
+                                status: Status::Ok.code,
+                                message: "Subscription inserted. ".to_string(),
+                                data: json!({"subscribed": subscription}),
+                            }));
+                        }
+                        None => {
+                            return Err(ApiError::BadRequest);
+                        }
+                    };
+                } else {
+                    Err(ApiError::BadRequest)
+                }
+            }
 
             EventType::CustomerSubscriptionCreated => {
-                println!("Customer subscription created: {:?}", event);
+                if let EventObject::Subscription(subscription) = event.data.object {
+                    dbg!("{:?}", json!(subscription));
+                    unimplemented!("CUSTOMER SUBSCRIPTION CREATED");
+                } else {
+                    return Err(ApiError::BadRequest);
+                }
 
-                unimplemented!()
-            },
+            }
 
             EventType::CustomerSubscriptionPaused => {
                 println!("Customer subscription paused: {:?}", event);
 
                 unimplemented!()
-            },
+            }
 
             EventType::CustomerSubscriptionResumed => {
                 println!("Customer subscription resumed: {:?}", event);
 
                 unimplemented!()
-            },
+            }
 
             EventType::CustomerSubscriptionDeleted => {
-                println!("Customer subscription deleted: {:?}", event);
+                if let EventObject::Subscription(subscription) = event.data.object {
+                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
 
-                unimplemented!()
-            },
-            _ => return Ok(json!(event)),
+                    db.set_subscription_inactive(&user.id.key().to_string()).await?;
+
+                    return Ok(Json(ApiResponse {
+                        status: Status::Ok.code,
+                        message: "Subscription deleted. ".to_string(),
+                        data: json!({"deleted": subscription.id().to_string()}),
+                    }));
+                } else {
+                    return Err(ApiError::BadRequest);
+                }
+            }
+            _ => {
+                return Ok(Json(ApiResponse {
+                    status: Status::PartialContent.code,
+                    message: "Event received. ".to_string(),
+                    data: json!(event),
+                }))
+            }
         }
     } else {
         panic!("Error verifying stripe signature. ");
-        
     }
 }
 
@@ -289,10 +332,15 @@ impl<'r> FromData<'r> for Payload {
 
         let contents = match data.open(limit).into_string().await {
             Ok(string) if string.is_complete() => string.into_inner(),
-            Ok(_) => return Outcome::Error((Status::PayloadTooLarge, ApiError::InternalServerError("Payload too large. ".to_string()))),
+            Ok(_) => {
+                return Outcome::Error((
+                    Status::PayloadTooLarge,
+                    ApiError::InternalServerError("Payload too large. ".to_string()),
+                ))
+            }
             Err(error) => {
                 return Outcome::Error((
-                    Status::ImATeapot,
+                    Status::BadRequest,
                     ApiError::InternalServerError(error.to_string()),
                 ))
             }
@@ -317,6 +365,5 @@ impl<'r> FromRequest<'r> for StripeSignature<'r> {
             Some(signature) => Outcome::Success(StripeSignature { signature }),
             None => Outcome::Error((Status::InternalServerError, "No signature provided. ")),
         }
-     
     }
 }
