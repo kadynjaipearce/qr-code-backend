@@ -4,7 +4,7 @@ use crate::utils::Environments;
 
 use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
-use surrealdb::Surreal;
+use surrealdb::{RecordId, Surreal};
 
 use super::models::{DynamicQrResult, UserResult};
 
@@ -305,8 +305,8 @@ impl Database {
             .bind(("user", user_id.to_string()))
             .await?;
 
-        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
-            Some(subscription) => Ok(Some(subscription.id.to_string())),
+        match result.take::<Option<models::SubscriptionId>>(0)? {
+            Some(id) => Ok(Some(id.subscription_id)),
             None => Ok(None),
         }
     }
@@ -468,6 +468,32 @@ impl Database {
             Some(subscription) => Ok(subscription),
             None => Err(ApiError::InternalServerError(
                 "No subscription found.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn set_subscription_inactive(&self, user_id: &str) -> Response<models::UserSubscriptionResult> {
+        /*
+            Sets a user's subscription status to inactive.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+
+            Returns:
+                Response<models::UserSubscriptionResult>: The updated subscription object.
+
+        */
+
+        let mut result = self
+            .db
+            .query("UPDATE type::thing('user', $user_id)->subscribed->subscription SET subscription_status = 'inactive';")
+            .bind(("user_id", user_id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(updated) => Ok(updated),
+            None => Err(ApiError::InternalServerError(
+                "Failed to update subscription.".to_string(),
             )),
         }
     }

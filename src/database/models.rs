@@ -48,6 +48,11 @@ pub struct UserResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct SubscriptionId{
+    pub subscription_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PaymentSession {
     pub session_id: String,
     pub tier: String,
@@ -77,7 +82,7 @@ pub struct UpdateUserSubscription {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSubscriptionResult {
-    pub id: RecordId,
+    pub subscription_id: RecordId,
     pub tier: String,
     pub usage: i32,
     pub start_date: Datetime,

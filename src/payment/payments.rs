@@ -16,8 +16,7 @@ use serde_json::json;
 
 use rocket::http::Status;
 use stripe::{
-    CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
-    Webhook,
+    CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType, Object, Webhook
 };
 use stripe::{Client, Subscription, SubscriptionId};
 
@@ -77,7 +76,7 @@ pub async fn create_checkout_session(
             cancel_url: Some("http://localhost:4200/cancel"),
             success_url: Some("http://localhost:4200/success"),
             customer: Some(customer.id),
-            client_reference_id: Some(&user.id.to_string()),
+            client_reference_id: Some(&payment.tier.to_string()),
             mode: Some(stripe::CheckoutSessionMode::Subscription),
             line_items: Some(vec![stripe::CreateCheckoutSessionLineItems {
                 price: match payment.tier.as_str() {
@@ -194,19 +193,13 @@ pub async fn cancel_subscription(
             ..Default::default()
         },
     )
-    .await;
+    .await?;
 
-    match result {
-        Ok(data) => Ok(Json(ApiResponse {
-            status: Status::Ok.code,
-            message: "Subscription cancelled. ".to_string(),
-            data: json!(data),
-        })),
-        Err(error) => {
-            eprintln!("Error cancelling subscription: {:?}", error);
-            return Err(ApiError::InternalServerError(error.to_string()));
-        }
-    }
+    Ok(Json(ApiResponse {
+        status: Status::Ok.code,
+        message: "Subscription cancelled. ".to_string(),
+        data: json!({"cancelled": result}),
+    }))
 }
 
 #[post("/stripe/webhook", format = "json", data = "<payload>")]
@@ -240,49 +233,29 @@ pub async fn stripe_webhook(
                 if let EventObject::CheckoutSession(session) = event.data.object {
                     let user = db.lookup_user_from_session(&session.id).await?;
 
-                    let subscription = match &session.subscription {
+                    let _subscription = match &session.subscription {
                         Some(sub) => {
-                            /*
-                                UserSubscription {
-                                sub_id: &sub.id().to_string(),
-                                tier: sub.as_object().unwrap().items.data.first().unwrap().price.clone().unwrap().nickname.unwrap().to_string(),
-                                status: session.status.unwrap().to_string(),
-                            }
+                            let subscription = db
+                                .insert_subscription(
+                                    &user.id.key().to_string(),
+                                    UserSubscription {
+                                        sub_id: sub.id().to_string(),
+                                        tier: session.client_reference_id.unwrap().to_string(),
+                                        status: session.status.unwrap().to_string(),
+                                    },
+                                )
+                                .await?;
 
-                                 */
-
-                            dbg!("{:?}", json!(session));
-                            unimplemented!(
-                                "sub: {:?}, tier: {:?}, status: {:?}",
-                                &sub.id().to_string(),
-                                &sub.as_object()
-                                    .expect("No object")
-                                    .items
-                                    .data
-                                    .first()
-                                    .expect("No Items")
-                                    .price
-                                    .clone()
-                                    .expect("No price")
-                                    .nickname
-                                    .expect("No nickname")
-                                    .to_string(),
-                                session.status.unwrap().to_string()
-                            );
+                            return Ok(Json(ApiResponse {
+                                status: Status::Ok.code,
+                                message: "Subscription inserted. ".to_string(),
+                                data: json!({"subscribed": subscription}),
+                            }));
                         }
                         None => {
                             return Err(ApiError::BadRequest);
                         }
                     };
-
-                    db.insert_subscription(&user.id.key().to_string(), subscription)
-                        .await?;
-
-                    Ok(Json(ApiResponse {
-                        status: Status::Ok.code,
-                        message: "Subscription inserted. ".to_string(),
-                        data: json!(user),
-                    }))
                 } else {
                     Err(ApiError::BadRequest)
                 }
@@ -296,7 +269,6 @@ pub async fn stripe_webhook(
                     return Err(ApiError::BadRequest);
                 }
 
-                unimplemented!()
             }
 
             EventType::CustomerSubscriptionPaused => {
@@ -315,7 +287,13 @@ pub async fn stripe_webhook(
                 if let EventObject::Subscription(subscription) = event.data.object {
                     let user = db.lookup_user_from_subscription(&subscription.id).await?;
 
-                    unimplemented!("Customer subscription deleted. {:?}", user.id);
+                    db.set_subscription_inactive(&user.id.key().to_string()).await?;
+
+                    return Ok(Json(ApiResponse {
+                        status: Status::Ok.code,
+                        message: "Subscription deleted. ".to_string(),
+                        data: json!({"deleted": subscription.id().to_string()}),
+                    }));
                 } else {
                     return Err(ApiError::BadRequest);
                 }

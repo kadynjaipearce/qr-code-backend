@@ -18,7 +18,7 @@ async fn validate_and_get_subscription(
     let subscription = db.get_subscription(user_id).await?;
 
     // Check if the subscription is valid (you could check subscription status or expiration here)
-    if subscription.subscription_status != "active" {
+    if subscription.subscription_status != "complete" {
         return Err(ApiError::Unauthorized);
     }
 
@@ -134,7 +134,7 @@ pub async fn read_qrcodes(
     }
 
     match validate_and_get_subscription(&db, &user_id).await {
-        Ok(subscription) => {
+        Ok(_subscription) => {
             // Create the dynamic URL
             let urls = db.list_user_urls(&user_id).await?;
 
@@ -212,7 +212,7 @@ pub async fn delete_qrcodes(
     }
 
     match validate_and_get_subscription(&db, &user_id).await {
-        Ok(subscription) => {
+        Ok(_subscription) => {
             // Create the dynamic URL
             let deleted = db.delete_dynamic_url(&qrcode_id).await?;
 
