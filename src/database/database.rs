@@ -159,8 +159,6 @@ impl Database {
         }
     }
 
-    // Dynamic URL CRUD operations.
-
     pub async fn insert_dynamic_url(
         &self,
         user_id: &str,
@@ -441,6 +439,121 @@ impl Database {
             Some(created) => Ok(created),
             None => Err(ApiError::InternalServerError(
                 "Failed to create subscription.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn get_subscription(
+        &self,
+        user_id: &str,
+    ) -> Response<models::UserSubscriptionResult> {
+        /*
+            Gets a user's subscription from the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+
+            Returns:
+                Response<Option<models::UserSubscriptionResult>>: The user's subscription object, or None if no subscription was found.
+
+        */
+
+        let mut result = self
+            .db
+            .query("SELECT * FROM type::thing('user', $user_id)->subscribed->subscription;")
+            .bind(("user_id", user_id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(subscription) => Ok(subscription),
+            None => Err(ApiError::InternalServerError(
+                "No subscription found.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn validate_subscription_status(&self, user_id: &str) -> Response<bool> {
+        /*
+            Checks the status of a user's subscription.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+
+            Returns:
+                Response<String>: The user's subscription status.
+
+        */
+
+        let mut result = self
+            .db
+            .query("SELECT subscription_status FROM type::thing('user', $user_id)->subscribed->subscription;")
+            .bind(("user_id", user_id.to_string()))
+            .await?;
+
+        match result.take::<Option<String>>(0)? {
+            Some(status) => {
+                if status == "active" || status == "completed" {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            None => Err(ApiError::InternalServerError(
+                "No subscription found.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn increment_usage(&self, user_id: &str) -> Response<models::UserSubscriptionResult> {
+        /*
+            Updates the usage of a user's subscription.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+                usage (int): The new usage value.
+
+            Returns:
+                Response<models::UserSubscriptionResult>: The updated subscription object.
+
+        */
+
+        let mut result = self
+            .db
+            .query("UPDATE type::thing('user', $user_id)->subscribed->subscription SET usage = usage + 1;")
+            .bind(("user_id", user_id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(updated) => Ok(updated),
+            None => Err(ApiError::InternalServerError(
+                "Failed to update usage.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn decrement_usage(&self, user_id: &str) -> Response<models::UserSubscriptionResult> {
+        /*
+            Updates the usage of a user's subscription.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+                usage (int): The new usage value.
+
+            Returns:
+                Response<models::UserSubscriptionResult>: The updated subscription object.
+
+        */
+
+        let mut result = self
+            .db
+            .query("UPDATE type::thing('user', $user_id)->subscribed->subscription SET usage = usage - 1;")
+            .bind(("user_id", user_id.to_string()))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(updated) => Ok(updated),
+            None => Err(ApiError::InternalServerError(
+                "Failed to update usage.".to_string(),
             )),
         }
     }

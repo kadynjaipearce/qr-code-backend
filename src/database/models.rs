@@ -2,6 +2,36 @@ use core::fmt;
 use serde::{Deserialize, Serialize};
 use surrealdb::{sql::Datetime, RecordId};
 
+pub enum SubscriptionStatus {
+    Active,
+    Inactive,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum SubscriptionTier {
+    Lite,
+    Pro,
+}
+
+impl SubscriptionTier {
+    // Define the max usage for each tier
+    pub fn max_usage(&self) -> i32 {
+        match self {
+            SubscriptionTier::Lite => 5,
+            SubscriptionTier::Pro => 25,
+        }
+    }
+
+    // Convert a string to a SubscriptionTier enum
+    pub fn from_str(tier_str: &str) -> Option<Self> {
+        match tier_str {
+            "Lite" => Some(SubscriptionTier::Lite),
+            "Pro" => Some(SubscriptionTier::Pro),
+            _ => None, // Invalid tier string
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: String,

@@ -81,13 +81,14 @@ pub async fn create_checkout_session(
             mode: Some(stripe::CheckoutSessionMode::Subscription),
             line_items: Some(vec![stripe::CreateCheckoutSessionLineItems {
                 price: match payment.tier.as_str() {
-                    "pro" => Some(secrets.get("STRIPE_PRODUCT_PRO")),
-                    "lite" => Some(secrets.get("STRIPE_PRODUCT_LITE")),
+                    "Pro" => Some(secrets.get("STRIPE_PRODUCT_PRO")),
+                    "Lite" => Some(secrets.get("STRIPE_PRODUCT_LITE")),
                     _ => return Err(ApiError::BadRequest),
                 },
                 quantity: Some(1),
                 ..Default::default()
             }]),
+
             expand: &["line_items", "line_items.data.price.product"],
             ..Default::default()
         },
@@ -128,10 +129,6 @@ pub async fn update_subscription(
             Response<Value>: the updated subscription object in a json response.
 
     */
-
-    if !token.has_permissions(&["write:subscription"]) {
-        return Err(ApiError::Unauthorized);
-    }
 
     if user != format_user_id(token.sub) {
         return Err(ApiError::Unauthorized);
@@ -241,41 +238,59 @@ pub async fn stripe_webhook(
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
                 if let EventObject::CheckoutSession(session) = event.data.object {
-                    let session_obj = session.clone();
+                    let user = db.lookup_user_from_session(&session.id).await?;
 
-                    let user = db.lookup_user_from_session(&session_obj.id).await?;
+                    let subscription = match &session.subscription {
+                        Some(sub) => {
+                            /*
+                                UserSubscription {
+                                sub_id: &sub.id().to_string(),
+                                tier: sub.as_object().unwrap().items.data.first().unwrap().price.clone().unwrap().nickname.unwrap().to_string(),
+                                status: session.status.unwrap().to_string(),
+                            }
 
-                    let subscription = match &session_obj.subscription {
-                        Some(sub) => UserSubscription {
-                            sub_id: sub.id().to_string(),
-                            tier: "pro".to_string(),
-                            status: session_obj.status.unwrap().to_string(), // Safe unwrap for status
-                        },
+                                 */
+
+                            dbg!("{:?}", json!(session));
+                            unimplemented!(
+                                "sub: {:?}, tier: {:?}, status: {:?}",
+                                &sub.id().to_string(),
+                                &sub.as_object()
+                                    .expect("No object")
+                                    .items
+                                    .data
+                                    .first()
+                                    .expect("No Items")
+                                    .price
+                                    .clone()
+                                    .expect("No price")
+                                    .nickname
+                                    .expect("No nickname")
+                                    .to_string(),
+                                session.status.unwrap().to_string()
+                            );
+                        }
                         None => {
-                            println!("Error: Subscription is None, cannot proceed");
-                            return Err(ApiError::BadRequest); // Return an error if subscription is None
+                            return Err(ApiError::BadRequest);
                         }
                     };
 
-                    match db.insert_subscription(&user.id.key().to_string(), subscription).await {
-                        Ok(_) => {
-                            unimplemented!("YESSSSSSSSSSSSSSSSSSSS")
-                        }
-                        Err(error) => {
-                            unimplemented!("Error inserting subscription: {:?}", error);
-                            return Err(ApiError::InternalServerError(error.to_string()));
-                        }
-                    };
-                    
-                    unimplemented!("Session completed. {:?}", user.id);
+                    db.insert_subscription(&user.id.key().to_string(), subscription)
+                        .await?;
+
+                    Ok(Json(ApiResponse {
+                        status: Status::Ok.code,
+                        message: "Subscription inserted. ".to_string(),
+                        data: json!(user),
+                    }))
                 } else {
-                    println!("Checkout session completed: {:?}", event.data.object);
                     Err(ApiError::BadRequest)
                 }
             }
 
             EventType::CustomerSubscriptionCreated => {
                 if let EventObject::Subscription(subscription) = event.data.object {
+                    dbg!("{:?}", json!(subscription));
                     unimplemented!("CUSTOMER SUBSCRIPTION CREATED");
                 } else {
                     return Err(ApiError::BadRequest);
