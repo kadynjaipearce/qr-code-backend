@@ -472,7 +472,11 @@ impl Database {
         }
     }
 
-    pub async fn set_subscription_inactive(&self, user_id: &str) -> Response<models::UserSubscriptionResult> {
+    pub async fn set_subscription_status(
+        &self,
+        user_id: &str,
+        status: &str,
+    ) -> Response<models::UserSubscriptionResult> {
         /*
             Sets a user's subscription status to inactive.
 
@@ -486,8 +490,9 @@ impl Database {
 
         let mut result = self
             .db
-            .query("UPDATE type::thing('user', $user_id)->subscribed->subscription SET subscription_status = 'inactive';")
+            .query("UPDATE type::thing('user', $user_id)->subscribed->subscription SET subscription_status = $status;")
             .bind(("user_id", user_id.to_string()))
+            .bind(("status", status.to_string()))
             .await?;
 
         match result.take::<Option<models::UserSubscriptionResult>>(0)? {
