@@ -187,7 +187,10 @@ impl Database {
         RELATE $user->created->CREATE type::thing('dynamic_url', rand::uuid()) 
         SET server_url = $server_url, 
         target_url = $target_url, 
-        created_at = time::now(), updated_at = time::now();
+        access_count = 0,
+        last_accessed = time::now(),
+        created_at = time::now(), 
+        updated_at = time::now();
         
         SELECT * FROM $user->created->dynamic_url;",
             )
@@ -523,9 +526,7 @@ impl Database {
 
         match result.take::<Option<models::SubscriptionStatus>>(0)? {
             Some(status) => {
-                if status.subscription_status == "active"
-                    || status.subscription_status == "complete"
-                {
+                if status.subscription_status == "active" || status.subscription_status == "complete" {
                     Ok(true)
                 } else {
                     Ok(false)
