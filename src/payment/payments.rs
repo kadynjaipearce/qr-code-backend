@@ -1,26 +1,24 @@
-use std::str::FromStr;
-
 use crate::database::database::Database;
 use crate::database::models::{format_user_id, PaymentSession, UserSubscription};
 use crate::errors::{ApiError, ApiResponse, Response};
+use crate::payment::models::PaymentRequest;
 use crate::routes::guard::Claims;
 use crate::utils::Environments;
 
 use rocket::data::{FromData, ToByteUnit};
+use rocket::http::Status;
 use rocket::outcome::Outcome;
 use rocket::request::FromRequest;
 use rocket::serde::{json::Json, json::Value};
 use rocket::State;
 use rocket::{delete, get, post, put};
 use serde_json::json;
-
-use rocket::http::Status;
+use std::str::FromStr;
 use stripe::{
-    CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType, Object, Webhook
+    CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
+    Object, Webhook,
 };
 use stripe::{Client, Subscription, SubscriptionId};
-
-use crate::payment::models::PaymentRequest;
 
 #[post("/subscription/<user_id>", format = "json", data = "<payment>")]
 pub async fn create_checkout_session(
@@ -110,53 +108,6 @@ pub async fn create_checkout_session(
     }))
 }
 
-#[put("/subscription/<user>", format = "json", data = "<subscription>")]
-pub async fn update_subscription(
-    token: Claims,
-    user: &str,
-    subscription: Json<Subscription>,
-    db: &State<Database>,
-    stripe: &State<Client>,
-) -> Response<Value> {
-    /*
-        Updates a subscription for a user.
-
-        Params:
-            subscription: subscription object containing the subscription details.
-
-        Returns:
-            Response<Value>: the updated subscription object in a json response.
-
-    */
-
-    if user != format_user_id(token.sub) {
-        return Err(ApiError::Unauthorized);
-    }
-
-    Subscription::update(
-        &stripe,
-        &SubscriptionId::from_str(user).unwrap(),
-        stripe::UpdateSubscription {
-            items: Some(vec![
-                stripe::UpdateSubscriptionItems {
-                    id: Some("".to_string()),
-                    deleted: Some(true),
-                    ..Default::default()
-                },
-                stripe::UpdateSubscriptionItems {
-                    price: Some("".to_string()),
-                    quantity: Some(1),
-                    ..Default::default()
-                },
-            ]),
-            ..Default::default()
-        },
-    )
-    .await?;
-
-    Ok(json!({"message": "Subscription updated."}))
-}
-
 #[delete("/subscription/<user_id>", format = "json")]
 pub async fn cancel_subscription(
     token: Claims,
@@ -221,8 +172,6 @@ pub async fn stripe_webhook(
 
     */
 
-    // verify the stripe signature.
-
     if let Ok(event) = Webhook::construct_event(
         &payload.contents,
         stripe_signature.signature,
@@ -261,33 +210,46 @@ pub async fn stripe_webhook(
                 }
             }
 
-            EventType::CustomerSubscriptionCreated => {
+            EventType::CustomerSubscriptionPaused => {
                 if let EventObject::Subscription(subscription) = event.data.object {
-                    dbg!("{:?}", json!(subscription));
-                    unimplemented!("CUSTOMER SUBSCRIPTION CREATED");
+                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
+
+                    db.set_subscription_status(&user.id.key().to_string(), "paused")
+                        .await?;
+
+                    return Ok(Json(ApiResponse {
+                        status: Status::Ok.code,
+                        message: "Subscription deleted. ".to_string(),
+                        data: json!({"paused": subscription.id().to_string()}),
+                    }));
                 } else {
                     return Err(ApiError::BadRequest);
                 }
-
-            }
-
-            EventType::CustomerSubscriptionPaused => {
-                println!("Customer subscription paused: {:?}", event);
-
-                unimplemented!()
             }
 
             EventType::CustomerSubscriptionResumed => {
-                println!("Customer subscription resumed: {:?}", event);
+                if let EventObject::Subscription(subscription) = event.data.object {
+                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
 
-                unimplemented!()
+                    db.set_subscription_status(&user.id.key().to_string(), "active")
+                        .await?;
+
+                    return Ok(Json(ApiResponse {
+                        status: Status::Ok.code,
+                        message: "Subscription deleted. ".to_string(),
+                        data: json!({"resumed": subscription.id().to_string()}),
+                    }));
+                } else {
+                    return Err(ApiError::BadRequest);
+                }
             }
 
             EventType::CustomerSubscriptionDeleted => {
                 if let EventObject::Subscription(subscription) = event.data.object {
                     let user = db.lookup_user_from_subscription(&subscription.id).await?;
 
-                    db.set_subscription_inactive(&user.id.key().to_string()).await?;
+                    db.set_subscription_status(&user.id.key().to_string(), "deleted")
+                        .await?;
 
                     return Ok(Json(ApiResponse {
                         status: Status::Ok.code,

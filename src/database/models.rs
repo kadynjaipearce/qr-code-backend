@@ -2,9 +2,9 @@ use core::fmt;
 use serde::{Deserialize, Serialize};
 use surrealdb::{sql::Datetime, RecordId};
 
-pub enum SubscriptionStatus {
-    Active,
-    Inactive,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscriptionStatus {
+    pub subscription_status: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ pub struct UserResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SubscriptionId{
+pub struct SubscriptionId {
     pub subscription_id: String,
 }
 
@@ -65,24 +65,22 @@ pub struct PaymentSessionResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct NewSubscription {
+    pub new_tier: String,
+    pub new_price_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserSubscription {
     pub sub_id: String,
     pub tier: String,
     pub status: String,
 }
 
-pub struct UpdateUserSubscription {
-    pub id: String,
-    pub tier: String,
-    pub usage: i32,
-    pub start_date: Datetime,
-    pub end_date: Datetime,
-    pub subscription_status: String,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSubscriptionResult {
-    pub subscription_id: RecordId,
+    pub id: RecordId,
+    pub subscription_id: String,
     pub tier: String,
     pub usage: i32,
     pub start_date: Datetime,

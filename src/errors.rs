@@ -36,6 +36,24 @@ impl From<surrealdb::Error> for ApiError {
     }
 }
 
+impl From<serde_json::Error> for ApiError {
+    fn from(value: serde_json::Error) -> Self {
+        ApiError::InternalServerError(value.to_string())
+    }
+}
+
+impl From<jsonwebtoken::errors::Error> for ApiError {
+    fn from(value: jsonwebtoken::errors::Error) -> Self {
+        ApiError::InternalServerError(value.to_string())
+    }
+}
+
+impl From<base64::DecodeError> for ApiError {
+    fn from(value: base64::DecodeError) -> Self {
+        ApiError::InternalServerError(value.to_string())
+    }
+}
+
 impl From<reqwest::Error> for ApiError {
     fn from(value: reqwest::Error) -> Self {
         ApiError::InternalServerError(value.to_string())
