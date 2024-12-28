@@ -15,10 +15,10 @@ async fn validate_and_get_subscription(
     db: &State<Database>,
     user_id: &str,
 ) -> Result<models::UserSubscriptionResult, ApiError> {
-    let subscription = db.get_subscription(user_id).await?;
+    let subscription = db.get_subscription(&user_id).await?;
 
     // Check if the subscription is valid (you could check subscription status or expiration here)
-    if subscription.subscription_status != "complete" {
+    if !db.validate_subscription_status(user_id).await? {
         return Err(ApiError::Unauthorized);
     }
 
@@ -62,7 +62,7 @@ pub async fn create_user(
 pub async fn create_qrcodes(
     token: Claims,
     db: &State<Database>,
-    user_id: String,
+    user_id: &str,
     qrcode: Json<models::DynamicQr>,
 ) -> Response<Json<ApiResponse>> {
     /*
@@ -215,6 +215,8 @@ pub async fn delete_qrcodes(
         Ok(_subscription) => {
             // Create the dynamic URL
             let deleted = db.delete_dynamic_url(&qrcode_id).await?;
+
+            db.decrement_usage(user_id).await?;
 
             // Return a success response
             Ok(Json(ApiResponse {

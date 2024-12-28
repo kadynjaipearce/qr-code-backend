@@ -1,5 +1,5 @@
 use crate::database::database::Database;
-use crate::database::models::{format_user_id, NewSubscription, PaymentSession, UserSubscription};
+use crate::database::models::{format_user_id, PaymentSession, UserSubscription};
 use crate::errors::{ApiError, ApiResponse, Response};
 use crate::payment::models::PaymentRequest;
 use crate::routes::guard::Claims;
@@ -16,7 +16,7 @@ use serde_json::json;
 use std::str::FromStr;
 use stripe::{
     CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
-    Object, UpdateSubscription, UpdateSubscriptionItems, Webhook,
+    Object, Webhook,
 };
 use stripe::{Client, Subscription, SubscriptionId};
 
@@ -105,71 +105,6 @@ pub async fn create_checkout_session(
         status: Status::Created.code,
         message: "Checkout session created. ".to_string(),
         data: json!(session.url),
-    }))
-}
-
-#[put("/subscription/<user_id>", format = "json", data = "<subscription>")]
-pub async fn update_subscription(
-    token: Claims,
-    user_id: &str,
-    subscription: Json<NewSubscription>,
-    db: &State<Database>,
-    stripe: &State<Client>,
-) -> Response<Json<ApiResponse>> {
-    /*
-        Updates a subscription for a user.
-
-        Params:
-            subscription: subscription object containing the subscription details.
-
-        Returns:
-            Response<Value>: the updated subscription object in a json response.
-
-    */
-
-    if user_id != format_user_id(token.sub) {
-        return Err(ApiError::Unauthorized);
-    }
-
-    let user = db.get_subscription(user_id).await?;
-
-    let subscription_item = Subscription::retrieve(
-        &stripe,
-        &SubscriptionId::from_str(&user.subscription_id).unwrap(),
-        &["items"],
-    )
-    .await?
-    .items;
-
-    dbg!(&subscription_item);
-
-    let subscription_item = &subscription_item.data[0];
-
-    let _ = Subscription::update(
-        &stripe,
-        &SubscriptionId::from_str(&user.subscription_id).unwrap(),
-        UpdateSubscription {
-            items: Some(vec![
-                UpdateSubscriptionItems {
-                    id: Some(subscription_item.id().to_string()),
-                    deleted: Some(true),
-                    ..Default::default()
-                },
-                UpdateSubscriptionItems {
-                    id: Some(subscription.new_tier.clone()),
-                    price: Some(subscription.new_price_id.clone()),
-                    ..Default::default()
-                },
-            ]),
-            ..Default::default()
-        },
-    )
-    .await?;
-
-    Ok(Json(ApiResponse {
-        status: Status::Ok.code,
-        message: "Subscription updated. ".to_string(),
-        data: json!({"updated": "success"}),
     }))
 }
 
@@ -275,23 +210,6 @@ pub async fn stripe_webhook(
                 }
             }
 
-            EventType::CustomerSubscriptionCreated => {
-                if let EventObject::Subscription(subscription) = event.data.object {
-                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
-
-                    db.set_subscription_status(&user.id.key().to_string(), "active")
-                        .await?;
-
-                    return Ok(Json(ApiResponse {
-                        status: Status::Ok.code,
-                        message: "Subscription deleted. ".to_string(),
-                        data: json!({"deleted": subscription.id().to_string()}),
-                    }));
-                } else {
-                    return Err(ApiError::BadRequest);
-                }
-            }
-
             EventType::CustomerSubscriptionPaused => {
                 if let EventObject::Subscription(subscription) = event.data.object {
                     let user = db.lookup_user_from_subscription(&subscription.id).await?;
@@ -313,7 +231,7 @@ pub async fn stripe_webhook(
                 if let EventObject::Subscription(subscription) = event.data.object {
                     let user = db.lookup_user_from_subscription(&subscription.id).await?;
 
-                    db.set_subscription_status(&user.id.key().to_string(), "completed")
+                    db.set_subscription_status(&user.id.key().to_string(), "active")
                         .await?;
 
                     return Ok(Json(ApiResponse {

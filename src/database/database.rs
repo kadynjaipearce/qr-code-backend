@@ -182,9 +182,9 @@ impl Database {
             .db
             .query(
                 "
-                LET $user = type::thing('user', $user_id)
+                LET $user = type::thing('user', $user_id);
                 
-        RELATE $user->created->CREATE type::thing('dynamic_url', uuid()) 
+        RELATE $user->created->CREATE type::thing('dynamic_url', rand::uuid()) 
         SET server_url = $server_url, 
         target_url = $target_url, 
         created_at = time::now(), updated_at = time::now();
@@ -521,9 +521,11 @@ impl Database {
             .bind(("user_id", user_id.to_string()))
             .await?;
 
-        match result.take::<Option<String>>(0)? {
+        match result.take::<Option<models::SubscriptionStatus>>(0)? {
             Some(status) => {
-                if status == "active" || status == "completed" {
+                if status.subscription_status == "active"
+                    || status.subscription_status == "complete"
+                {
                     Ok(true)
                 } else {
                     Ok(false)
