@@ -9,9 +9,9 @@ use rocket::data::{FromData, ToByteUnit};
 use rocket::http::Status;
 use rocket::outcome::Outcome;
 use rocket::request::FromRequest;
-use rocket::serde::{json::Json, json::Value};
+use rocket::serde::json::Json;
 use rocket::State;
-use rocket::{delete, get, post, put};
+use rocket::{delete, post};
 use serde_json::json;
 use std::str::FromStr;
 use stripe::{
@@ -182,9 +182,11 @@ pub async fn stripe_webhook(
                 if let EventObject::CheckoutSession(session) = event.data.object {
                     let user = db.lookup_user_from_session(&session.id).await?;
 
+                    dbg!(&user);
+
                     let _subscription = match &session.subscription {
                         Some(sub) => {
-                            let subscription = db
+                            let subscription = db       
                                 .insert_subscription(
                                     &user.id.key().to_string(),
                                     UserSubscription {
@@ -194,6 +196,8 @@ pub async fn stripe_webhook(
                                     },
                                 )
                                 .await?;
+
+                            dbg!(&user.id.key().to_string());
 
                             return Ok(Json(ApiResponse {
                                 status: Status::Ok.code,

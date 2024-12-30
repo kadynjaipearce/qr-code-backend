@@ -1,7 +1,5 @@
 use crate::database::database::Database;
-use crate::database::models::{
-    self, format_user_id, DynamicQr, DynamicQrResult, SubscriptionTier, User,
-};
+use crate::database::models::{self, format_user_id, SubscriptionTier, User, UserDetails};
 use crate::errors::{ApiError, ApiResponse, Response};
 use crate::routes::guard::Claims;
 
@@ -56,6 +54,36 @@ pub async fn create_user(
         })),
         Err(err) => Err(ApiError::InternalServerError(err.to_string())),
     }
+}
+
+#[get("/user/<user_id>")]
+pub async fn get_user_details(
+    token: Claims,
+    db: &State<Database>,
+    user_id: &str) -> Response<Json<ApiResponse>> {
+
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let user = match db.select_user(&user_id).await? {
+        Some(user) => user,
+        None => return Err(ApiError::NotFound),
+    };
+
+    let subscription = db.get_subscription(&user_id).await?;
+
+
+    let details = UserDetails {
+        user,
+        subscription,
+    };
+
+    Ok(Json(ApiResponse {
+        status: Status::Ok.code,
+        message: "User found.".to_string(),
+        data: json!(details),
+    }))
 }
 
 #[post("/user/<user_id>/qrcode", format = "json", data = "<qrcode>")]

@@ -48,6 +48,12 @@ pub struct UserResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct UserDetails {
+    pub user: UserResult,
+    pub subscription: UserSubscriptionResult,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SubscriptionId {
     pub subscription_id: String,
 }
@@ -90,7 +96,6 @@ pub struct UserSubscriptionResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DynamicQr {
-    pub server_url: String,
     pub target_url: String,
 }
 

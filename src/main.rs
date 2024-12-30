@@ -47,6 +47,7 @@ async fn main(#[shuttle_runtime::Secrets] secrets: SecretStore) -> shuttle_rocke
                 index,
                 routes::qrcode::scan,
                 routes::user::create_user,
+                routes::user::get_user_details,
                 routes::user::create_qrcodes,
                 routes::user::read_qrcodes,
                 routes::user::update_qrcodes,
