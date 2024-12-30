@@ -286,7 +286,7 @@ impl Database {
         Ok(true)
     }
 
-    pub async fn lookup_subscription_id(&self, user_id: &str) -> Response<Option<String>> {
+    pub async fn get_subscription_id(&self, user_id: &str) -> Response<Option<String>> {
         /*
             Looks up a user's subscription in the database.
 
@@ -312,7 +312,7 @@ impl Database {
         }
     }
 
-    pub async fn lookup_user_from_subscription(
+    pub async fn get_user_from_subscription(
         &self,
         subscription_id: &str,
     ) -> Response<UserResult> {
@@ -344,7 +344,7 @@ impl Database {
         }
     }
 
-    pub async fn lookup_user_from_session(&self, session_id: &str) -> Response<UserResult> {
+    pub async fn get_user_from_session(&self, session_id: &str) -> Response<UserResult> {
         /*
             Looks up a user's Auth0 ID from a session ID in the database.
 
@@ -475,6 +475,44 @@ impl Database {
             Some(subscription) => Ok(subscription),
             None => Err(ApiError::InternalServerError(
                 "No subscription found.".to_string(),
+            )),
+        }
+    }
+
+    pub async fn override_subscription(
+        &self,
+        user_id: &str,
+        subscription_id: &str,
+        subscription: models::UserSubscription,
+    ) -> Response<models::UserSubscriptionResult> {
+        /*
+            Overrides a user's subscription in the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+                subscription (models::UserSubscription): The new subscription object.
+
+            Returns:
+                Response<models::UserSubscriptionResult>: The updated subscription object.
+
+        */
+
+        let mut result = self
+            .db
+            .query("LET $user = type::thing('user', $user_id);
+            
+            UPDATE subscription SET subscription_id = $subscription_id, tier = $tier, start_date = time::now(), end_date = time::now(), subscription_status = $subscription_status WHERE subscription_id = $subscription_id; ;
+            
+            SELECT * FROM subscription WHERE subscription_id = $subscription_id LIMIT 1;")
+            .bind(("user_id", user_id.to_string()))
+            .bind(("tier", subscription.tier))
+            .bind(("subscription_status", subscription.status))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(updated) => Ok(updated),
+            None => Err(ApiError::InternalServerError(
+                "Failed to update subscription.".to_string(),
             )),
         }
     }

@@ -1,5 +1,5 @@
 use crate::database::database::Database;
-use crate::database::models::{format_user_id, PaymentSession, UserSubscription};
+use crate::database::models::{format_user_id, PaymentSession, SubscriptionAction, UpdateRequest, UserSubscription};
 use crate::errors::{ApiError, ApiResponse, Response};
 use crate::payment::models::PaymentRequest;
 use crate::routes::guard::Claims;
@@ -11,8 +11,9 @@ use rocket::outcome::Outcome;
 use rocket::request::FromRequest;
 use rocket::serde::json::Json;
 use rocket::State;
-use rocket::{delete, post};
+use rocket::{delete, post, put};
 use serde_json::json;
+use stripe::generated::core::customer;
 use std::str::FromStr;
 use stripe::{
     CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
@@ -108,6 +109,73 @@ pub async fn create_checkout_session(
     }))
 }
 
+#[put("/subscription/<user_id>", format = "json", data = "<update_request>")]
+pub async fn update_subscription(
+    token: Claims,
+    update_request: Json<UpdateRequest>,
+    db: &State<Database>,
+    user_id: &str,
+    stripe: &State<Client>,
+) -> Response<Json<ApiResponse>> {
+    /*
+        Updates a subscription for a user.
+
+        Params:
+            subscription: subscription object containing the subscription details.
+
+        Returns:
+            Response<Value>: the updated subscription object in a json response.
+
+    */
+
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let subscription_id = match db.get_subscription_id(&user_id).await? {
+        Some(id) => id,
+        None => return Err(ApiError::NotFound),
+    };
+
+    match update_request.action {
+        SubscriptionAction::Cancel => {
+            let result = Subscription::update(
+                &stripe,
+                &SubscriptionId::from_str(&subscription_id).unwrap(),
+                stripe::UpdateSubscription {
+                    cancel_at_period_end: Some(true),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+            return Ok(Json(ApiResponse {
+                status: Status::Ok.code,
+                message: "Subscription cancelled. ".to_string(),
+                data: json!({"cancelled": result}),
+            }));
+        },
+
+        SubscriptionAction::Upgrade => {
+            unimplemented!()
+        },
+
+        SubscriptionAction::Downgrade => {
+            unimplemented!()
+        },
+
+        SubscriptionAction::Resume => {
+            let id = SubscriptionId::from_str(&subscription_id).unwrap();
+            let subscription = Subscription::retrieve(&stripe, &id, &[]).await?;
+            let customer = Customer::retrieve(&stripe, &subscription.customer.id(), &[]).await?;
+
+            
+
+            unimplemented!()
+        },
+    }
+}
+
 #[delete("/subscription/<user_id>", format = "json")]
 pub async fn cancel_subscription(
     token: Claims,
@@ -130,7 +198,7 @@ pub async fn cancel_subscription(
         return Err(ApiError::Unauthorized);
     }
 
-    let subscription_id = match db.lookup_subscription_id(&user_id).await? {
+    let subscription_id = match db.get_subscription_id(&user_id).await? {
         Some(id) => id,
         None => return Err(ApiError::NotFound),
     };
@@ -180,7 +248,7 @@ pub async fn stripe_webhook(
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
                 if let EventObject::CheckoutSession(session) = event.data.object {
-                    let user = db.lookup_user_from_session(&session.id).await?;
+                    let user = db.get_user_from_session(&session.id).await?;
 
                     dbg!(&user);
 
@@ -216,7 +284,7 @@ pub async fn stripe_webhook(
 
             EventType::CustomerSubscriptionPaused => {
                 if let EventObject::Subscription(subscription) = event.data.object {
-                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
+                    let user = db.get_user_from_subscription(&subscription.id).await?;
 
                     db.set_subscription_status(&user.id.key().to_string(), "paused")
                         .await?;
@@ -233,7 +301,7 @@ pub async fn stripe_webhook(
 
             EventType::CustomerSubscriptionResumed => {
                 if let EventObject::Subscription(subscription) = event.data.object {
-                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
+                    let user = db.get_user_from_subscription(&subscription.id).await?;
 
                     db.set_subscription_status(&user.id.key().to_string(), "active")
                         .await?;
@@ -250,7 +318,7 @@ pub async fn stripe_webhook(
 
             EventType::CustomerSubscriptionDeleted => {
                 if let EventObject::Subscription(subscription) = event.data.object {
-                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
+                    let user = db.get_user_from_subscription(&subscription.id).await?;
 
                     db.set_subscription_status(&user.id.key().to_string(), "deleted")
                         .await?;

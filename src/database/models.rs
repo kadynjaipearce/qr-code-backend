@@ -58,6 +58,23 @@ pub struct SubscriptionId {
     pub subscription_id: String,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "snake_case")]  // This will map the enum variants to lowercase snake_case in JSON
+pub enum SubscriptionAction {
+    Cancel,
+    Upgrade,
+    Downgrade,
+    Resume,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateRequest {
+    pub action: SubscriptionAction,
+    pub subscription_id: String,
+    pub new_tier: String,
+
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PaymentSession {
     pub session_id: String,

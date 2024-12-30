@@ -82,6 +82,15 @@ impl<'r> Responder<'r, 'static> for ApiError {
             _ => Status::InternalServerError,
         };
 
+        dbg!(
+            "Error: {:?}\nStatus: {}\nMethod: {}\nURI: {}\nHeaders: {:?}",
+            &self,
+            status,
+            request.method(),
+            request.uri(),
+            request.headers()
+        );
+
         status::Custom(
             status,
             Json(json!({"status": status, "error": self.to_string()})),
