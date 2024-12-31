@@ -60,8 +60,8 @@ pub async fn create_user(
 pub async fn get_user_details(
     token: Claims,
     db: &State<Database>,
-    user_id: &str) -> Response<Json<ApiResponse>> {
-
+    user_id: &str,
+) -> Response<Json<ApiResponse>> {
     if user_id != format_user_id(token.sub) {
         return Err(ApiError::Unauthorized);
     }
@@ -73,11 +73,7 @@ pub async fn get_user_details(
 
     let subscription = db.get_subscription(&user_id).await?;
 
-
-    let details = UserDetails {
-        user,
-        subscription,
-    };
+    let details = UserDetails { user, subscription };
 
     Ok(Json(ApiResponse {
         status: Status::Ok.code,

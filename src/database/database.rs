@@ -312,6 +312,28 @@ impl Database {
         }
     }
 
+    pub async fn delete_user_data(&self, user_id: &str) -> Response<bool> {
+        /*
+            Deletes a user's data from the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+
+        */
+
+        let _ = self
+            .db
+            .query("
+                    LET $user = type::thing('user', $user_id);
+            
+                    DELETE $user->subscribed->subscription;
+                    DELETE $user->created->dynamic_url;")
+            .bind(("user_id", user_id.to_string()))
+            .await?;
+
+        Ok(true)
+    }
+
     pub async fn get_user_from_subscription(
         &self,
         subscription_id: &str,
@@ -338,7 +360,7 @@ impl Database {
             .bind(("subscription_id", subscription_id.to_string()))
             .await?;
 
-        match result.take::<Option<models::UserResult>>(0)? {
+        match result.take::<Option<models::UserResult>>(2)? {
             Some(subscription) => Ok(subscription),
             None => Err(ApiError::InternalServerError("No user found.".to_string())),
         }
