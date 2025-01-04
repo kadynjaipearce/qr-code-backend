@@ -15,10 +15,12 @@ use rocket::serde::json::Json;
 use rocket::State;
 use rocket::{delete, post, put};
 use serde_json::json;
+use stripe::generated::billing::subscription;
+use stripe::generated::billing::subscription_item::SubscriptionProrationBehavior;
 use std::str::FromStr;
 use stripe::{
     CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
-    Object, Webhook,
+    Object, Webhook
 };
 use stripe::{Client, Subscription, SubscriptionId};
 
@@ -44,6 +46,12 @@ pub async fn create_checkout_session(
 
     if user_id != format_user_id(token.sub) {
         return Err(ApiError::Unauthorized);
+    }
+
+    // check if user has a valid subscription.
+
+    if db.validate_subscription_status(&user_id).await? {
+        return Err(ApiError::BadRequest);
     }
 
     let user = match db.select_user(&user_id).await? {
@@ -117,6 +125,7 @@ pub async fn update_subscription(
     db: &State<Database>,
     user_id: &str,
     stripe: &State<Client>,
+    secrets: &State<Environments>
 ) -> Response<Json<ApiResponse>> {
     /*
         Updates a subscription for a user.
@@ -158,11 +167,54 @@ pub async fn update_subscription(
         }
 
         SubscriptionAction::Upgrade => {
-            unimplemented!()
+            let sub_item = stripe::Subscription::retrieve(&stripe, &SubscriptionId::from_str(&subscription_id).unwrap(), &[]).await?.items.data[0].id.clone();
+
+            let upgraded = Subscription::update(
+                &stripe,
+                &SubscriptionId::from_str(&subscription_id).unwrap(),
+                stripe::UpdateSubscription {
+                    items: Some(vec![stripe::UpdateSubscriptionItems {
+                        id: Some(stripe::SubscriptionItemId::from_str(&sub_item).unwrap().to_string()),
+                        price: Some(secrets.get("STRIPE_PRODUCT_PRO")),
+                        quantity: Some(1),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                },
+                
+            ).await?;
+
+            return Ok(Json(ApiResponse {
+                status: Status::Ok.code,
+                message: "Subscription cancelled. ".to_string(),
+                data: json!({"upgraded": upgraded}),
+            }));
+  
         }
 
         SubscriptionAction::Downgrade => {
-            unimplemented!()
+            let sub_item = stripe::Subscription::retrieve(&stripe, &SubscriptionId::from_str(&subscription_id).unwrap(), &[]).await?.items.data[0].id.clone();
+
+            let downgraded = Subscription::update(
+                &stripe,
+                &SubscriptionId::from_str(&subscription_id).unwrap(),
+                stripe::UpdateSubscription {
+                    items: Some(vec![stripe::UpdateSubscriptionItems {
+                        id: Some(stripe::SubscriptionItemId::from_str(&sub_item).unwrap().to_string()),
+                        price: Some(secrets.get("STRIPE_PRODUCT_LITE")),
+                        quantity: Some(1),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                },
+                
+            ).await?;
+
+            return Ok(Json(ApiResponse {
+                status: Status::Ok.code,
+                message: "Subscription cancelled. ".to_string(),
+                data: json!({"downgraded": downgraded}),
+            }));
         }
 
         SubscriptionAction::Resume => {
@@ -288,6 +340,29 @@ pub async fn stripe_webhook(
                     };
                 } else {
                     Err(ApiError::BadRequest)
+                }
+            }
+
+            EventType::CustomerSubscriptionUpdated => {
+                if let EventObject::Subscription(subscription) = event.data.object {
+                    dbg!(&subscription);
+                    let user = db.get_user_from_subscription(&subscription.id).await?;
+
+                    let tier = match &subscription.items.data[0].price.clone().unwrap().id.as_ref() {
+                        id if id == &secrets.get("STRIPE_PRODUCT_PRO") => "Pro".to_string(),
+                        id if id == &secrets.get("STRIPE_PRODUCT_LITE") => "Lite".to_string(),
+                        _ => return Err(ApiError::BadRequest),
+                    };
+
+                    let updated = db.override_subscription(&user.id.key().to_string(), &subscription.id.to_string(), &tier).await?;
+
+                    return Ok(Json(ApiResponse {
+                        status: Status::Ok.code,
+                        message: "Subscription updated. ".to_string(),
+                        data: json!({"updated": updated}),
+                    }));
+                } else {
+                    return Err(ApiError::BadRequest);
                 }
             }
 

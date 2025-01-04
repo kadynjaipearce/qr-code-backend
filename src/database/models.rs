@@ -50,7 +50,7 @@ pub struct UserResult {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserDetails {
     pub user: UserResult,
-    pub subscription: UserSubscriptionResult,
+    pub subscription: Option<UserSubscriptionResult>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

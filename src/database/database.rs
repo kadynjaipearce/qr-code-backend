@@ -505,7 +505,7 @@ impl Database {
         &self,
         user_id: &str,
         subscription_id: &str,
-        subscription: models::UserSubscription,
+        new_tier: &str,
     ) -> Response<models::UserSubscriptionResult> {
         /*
             Overrides a user's subscription in the database.
@@ -523,12 +523,12 @@ impl Database {
             .db
             .query("LET $user = type::thing('user', $user_id);
             
-            UPDATE subscription SET subscription_id = $subscription_id, tier = $tier, start_date = time::now(), end_date = time::now(), subscription_status = $subscription_status WHERE subscription_id = $subscription_id; ;
+            UPDATE subscription SET tier = $tier, start_date = time::now(), end_date = time::now() WHERE subscription_id = $subscription_id;
             
             SELECT * FROM subscription WHERE subscription_id = $subscription_id LIMIT 1;")
             .bind(("user_id", user_id.to_string()))
-            .bind(("tier", subscription.tier))
-            .bind(("subscription_status", subscription.status))
+            .bind(("tier", new_tier.to_string()))
+            .bind(("subscription_id", subscription_id.to_string() ))
             .await?;
 
         match result.take::<Option<models::UserSubscriptionResult>>(0)? {
@@ -598,9 +598,7 @@ impl Database {
                     Ok(false)
                 }
             }
-            None => Err(ApiError::InternalServerError(
-                "No subscription found.".to_string(),
-            )),
+            None => Ok(false),
         }
     }
 

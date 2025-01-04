@@ -71,7 +71,10 @@ pub async fn get_user_details(
         None => return Err(ApiError::NotFound),
     };
 
-    let subscription = db.get_subscription(&user_id).await?;
+    let subscription = match db.get_subscription(&user_id).await {
+        Ok(subscription) => Some(subscription),
+        _ => None,
+    };
 
     let details = UserDetails { user, subscription };
 
