@@ -15,8 +15,6 @@ use rocket::serde::json::Json;
 use rocket::State;
 use rocket::{delete, post, put};
 use serde_json::json;
-use stripe::generated::billing::subscription;
-use stripe::generated::billing::subscription_item::SubscriptionProrationBehavior;
 use std::str::FromStr;
 use stripe::{
     CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
@@ -81,8 +79,8 @@ pub async fn create_checkout_session(
     let session = CheckoutSession::create(
         &stripe,
         CreateCheckoutSession {
-            cancel_url: Some("http://localhost:4200/cancel"),
-            success_url: Some("http://localhost:4200/success"),
+            cancel_url: Some(&secrets.get("STRIPE_CANCEL_URL")),
+            success_url: Some(&secrets.get("STRIPE_SUCCESS_URL")),
             customer: Some(customer.id),
             client_reference_id: Some(&payment.tier.to_string()),
             mode: Some(stripe::CheckoutSessionMode::Subscription),
@@ -310,8 +308,6 @@ pub async fn stripe_webhook(
             EventType::CheckoutSessionCompleted => {
                 if let EventObject::CheckoutSession(session) = event.data.object {
                     let user = db.get_user_from_session(&session.id).await?;
-
-                    dbg!(&user);
 
                     let _subscription = match &session.subscription {
                         Some(sub) => {

@@ -6,7 +6,7 @@ use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
-use super::models::{DynamicQrResult, UserResult};
+use super::models::UserResult;
 
 pub struct Database {
     db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
