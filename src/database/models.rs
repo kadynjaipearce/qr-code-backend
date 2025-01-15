@@ -48,8 +48,30 @@ pub struct UserResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct UserDetails {
+    pub user: UserResult,
+    pub subscription: Option<UserSubscriptionResult>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SubscriptionId {
     pub subscription_id: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "snake_case")] // This will map the enum variants to lowercase snake_case in JSON
+pub enum SubscriptionAction {
+    Cancel,
+    Upgrade,
+    Downgrade,
+    Resume,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateRequest {
+    pub action: SubscriptionAction,
+    pub subscription_id: String,
+    pub new_tier: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,7 +112,6 @@ pub struct UserSubscriptionResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DynamicQr {
-    pub server_url: String,
     pub target_url: String,
 }
 

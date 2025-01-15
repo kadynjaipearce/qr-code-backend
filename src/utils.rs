@@ -26,8 +26,7 @@ impl Environments {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct Jwk {
-    alg: String,
+pub struct Jwk {
     kty: String,
     kid: String,
     n: String,

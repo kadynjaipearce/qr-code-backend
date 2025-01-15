@@ -4,9 +4,9 @@ use crate::utils::Environments;
 
 use surrealdb::engine::remote::ws::{Client, Wss};
 use surrealdb::opt::auth::Root;
-use surrealdb::{RecordId, Surreal};
+use surrealdb::Surreal;
 
-use super::models::{DynamicQrResult, UserResult};
+use super::models::UserResult;
 
 pub struct Database {
     db: Surreal<Client>, //  Holds a private instance of the SurrealDB connection to restrict query access.
@@ -136,7 +136,7 @@ impl Database {
         }
     }
 
-    pub async fn select_user(&self, id: &str) -> Response<Option<models::UserResult>> {
+    pub async fn select_user(&self, user_id: &str) -> Response<Option<models::UserResult>> {
         /*
            Selects a user from the database with a id.
 
@@ -149,8 +149,8 @@ impl Database {
 
         let mut result = self
             .db
-            .query("SELECT * FROM type::thing('user', $id);")
-            .bind(("id", id.to_string()))
+            .query("SELECT * FROM type::thing('user', $user_id);")
+            .bind(("user_id", user_id.to_string()))
             .await?;
 
         match result.take::<Option<models::UserResult>>(0)? {
@@ -163,7 +163,7 @@ impl Database {
         &self,
         user_id: &str,
         dynamic_url: models::DynamicQr,
-    ) -> Response<models::DynamicQrResult> {
+    ) -> Response<Vec<models::DynamicQrResult>> {
         /*
            Inserts a new dynamic URL into the database.
 
@@ -183,9 +183,12 @@ impl Database {
             .query(
                 "
                 LET $user = type::thing('user', $user_id);
+                LET $url = type::thing('dynamic_url', rand::ulid());
                 
-        RELATE $user->created->CREATE type::thing('dynamic_url', rand::uuid()) 
-        SET server_url = $server_url, 
+        RELATE $user->created->CREATE $url 
+        SET server_url = rand::ulid(), 
+        access_count = 0,
+        last_accessed = time::now(),
         target_url = $target_url, 
         access_count = 0,
         last_accessed = time::now(),
@@ -195,15 +198,17 @@ impl Database {
         SELECT * FROM $user->created->dynamic_url;",
             )
             .bind(("user_id", user_id.to_string()))
-            .bind(("server_url", dynamic_url.server_url))
             .bind(("target_url", dynamic_url.target_url))
             .await?;
 
-        match result.take::<Option<models::DynamicQrResult>>(2)? {
-            Some(created) => Ok(created),
-            None => Err(ApiError::InternalServerError(
+        let created = result.take::<Vec<models::DynamicQrResult>>(3)?;
+
+        if created.is_empty() {
+            Err(ApiError::InternalServerError(
                 "Failed to create dynamic URL.".to_string(),
-            )),
+            ))
+        } else {
+            Ok(created)
         }
     }
 
@@ -221,7 +226,8 @@ impl Database {
 
         let mut result = self
             .db
-            .query("SELECT target_url FROM dynamic_url WHERE server_url = $server_url")
+            .query("SELECT target_url FROM dynamic_url WHERE server_url = $server_url;
+                    UPDATE dynamic_url SET access_count = access_count + 1, last_accessed = time::now() WHERE server_url = $server_url;")
             .bind(("server_url", server_url.to_string()))
             .await?;
 
@@ -235,7 +241,7 @@ impl Database {
 
     pub async fn update_dynamic_url(
         &self,
-        qrcode_id: &str,
+        server_url: &str,
         new_target_url: &str,
     ) -> Response<models::DynamicQrResult> {
         /*
@@ -252,8 +258,8 @@ impl Database {
 
         let mut result = self
             .db
-            .query("UPDATE dynamic_url SET target_url = $target_url, updated_at = time::now() WHERE id = $id")
-            .bind(("id", qrcode_id.to_string()))
+            .query("UPDATE dynamic_url SET target_url = $target_url, updated_at = time::now() WHERE server_url = $server_url")
+            .bind(("server_url", server_url.to_string()))
             .bind(("target_url", new_target_url.to_string()))
             .await?;
 
@@ -265,7 +271,7 @@ impl Database {
         }
     }
 
-    pub async fn delete_dynamic_url(&self, id: &str) -> Response<DynamicQrResult> {
+    pub async fn delete_dynamic_url(&self, server_url: &str) -> Response<bool> {
         /*
             Deletes a dynamic URL from the database.
 
@@ -274,21 +280,16 @@ impl Database {
 
         */
 
-        let mut result = self
+        let _ = self
             .db
-            .query("DELETE dynamic_url WHERE id = $id")
-            .bind(("id", id.to_string()))
+            .query("DELETE dynamic_url WHERE server_url = $server_url")
+            .bind(("server_url", server_url.to_string()))
             .await?;
 
-        match result.take::<Option<models::DynamicQrResult>>(0)? {
-            Some(deleted) => Ok(deleted),
-            None => Err(ApiError::InternalServerError(
-                "Failed to delete url.".to_string(),
-            )),
-        }
+        Ok(true)
     }
 
-    pub async fn lookup_subscription_id(&self, user_id: &str) -> Response<Option<String>> {
+    pub async fn get_subscription_id(&self, user_id: &str) -> Response<Option<String>> {
         /*
             Looks up a user's subscription in the database.
 
@@ -314,7 +315,29 @@ impl Database {
         }
     }
 
-    pub async fn lookup_user_from_subscription(
+    pub async fn delete_user_data(&self, user_id: &str) -> Response<bool> {
+        /*
+            Deletes a user's data from the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+
+        */
+
+        let _ = self
+            .db
+            .query("
+                    LET $user = type::thing('user', $user_id);
+            
+                    DELETE $user->subscribed->subscription;
+                    DELETE $user->created->dynamic_url;")
+            .bind(("user_id", user_id.to_string()))
+            .await?;
+
+        Ok(true)
+    }
+
+    pub async fn get_user_from_subscription(
         &self,
         subscription_id: &str,
     ) -> Response<UserResult> {
@@ -322,28 +345,31 @@ impl Database {
             Looks up a user's Auth0 ID from a subscription ID in the database.
 
             Params:
-                subscription_id (string): The subscription ID to look up.
+                subscription_id (str): The subscription ID to look up.
 
             Returns:
-                Response<Option<String>>: The user's Auth0 ID, or None if no user was found.
+                Response<UserResult>: The user's data
 
         */
 
         let mut result = self
             .db
             .query(
-                "SELECT * FROM user WHERE (SELECT <-subscribed<-user FROM subscription WHERE subscription_id = $subscription_id) LIMIT 1;",
+                "
+                LET $subscription = type::thing('subscription', $subscription_id);
+                LET $user = SELECT in FROM subscribed WHERE out = $subscription;
+                SELECT * FROM $user.in;",
             )
             .bind(("subscription_id", subscription_id.to_string()))
             .await?;
 
-        match result.take::<Option<models::UserResult>>(0)? {
+        match result.take::<Option<models::UserResult>>(2)? {
             Some(subscription) => Ok(subscription),
             None => Err(ApiError::InternalServerError("No user found.".to_string())),
         }
     }
 
-    pub async fn lookup_user_from_session(&self, session_id: &str) -> Response<UserResult> {
+    pub async fn get_user_from_session(&self, session_id: &str) -> Response<UserResult> {
         /*
             Looks up a user's Auth0 ID from a session ID in the database.
 
@@ -358,12 +384,15 @@ impl Database {
         let mut result = self
             .db
             .query(
-                "SELECT * FROM user WHERE (SELECT <-payment<-user FROM session WHERE session_id = $session_id) LIMIT 1;",
+                "
+                LET $payment = type::thing('session', $session_id);
+                LET $user = SELECT in FROM payment WHERE out = $payment;
+                SELECT * FROM $user.in;",
             )
             .bind(("session_id", session_id.to_string()))
             .await?;
 
-        match result.take::<Option<models::UserResult>>(0)? {
+        match result.take::<Option<models::UserResult>>(2)? {
             Some(subscription) => Ok(subscription),
             None => Err(ApiError::InternalServerError("No user found.".to_string())),
         }
@@ -386,12 +415,12 @@ impl Database {
         let mut result = self.db
             .query("
 
-            LET $user = type::thing('session', $user_id);
+            LET $user = type::thing('user', $user_id);
             
             RELATE $user->payment->CREATE type::thing('session', $session_id) SET session_id = $session_id, tier = $tier, created_at = time::now();
             
             SELECT * FROM $user->payment->session ORDER BY created_at DESC LIMIT 1;")
-            .bind(("user", user_id.to_string()))
+            .bind(("user_id", user_id.to_string()))
             .bind(("session_id", session.session_id))
             .bind(("tier", session.tier))
             .await?;
@@ -475,6 +504,44 @@ impl Database {
         }
     }
 
+    pub async fn override_subscription(
+        &self,
+        user_id: &str,
+        subscription_id: &str,
+        new_tier: &str,
+    ) -> Response<models::UserSubscriptionResult> {
+        /*
+            Overrides a user's subscription in the database.
+
+            Params:
+                user_id (string): The user's Auth0 ID.
+                subscription (models::UserSubscription): The new subscription object.
+
+            Returns:
+                Response<models::UserSubscriptionResult>: The updated subscription object.
+
+        */
+
+        let mut result = self
+            .db
+            .query("LET $user = type::thing('user', $user_id);
+            
+            UPDATE subscription SET tier = $tier, start_date = time::now(), end_date = time::now() WHERE subscription_id = $subscription_id;
+            
+            SELECT * FROM subscription WHERE subscription_id = $subscription_id LIMIT 1;")
+            .bind(("user_id", user_id.to_string()))
+            .bind(("tier", new_tier.to_string()))
+            .bind(("subscription_id", subscription_id.to_string() ))
+            .await?;
+
+        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+            Some(updated) => Ok(updated),
+            None => Err(ApiError::InternalServerError(
+                "Failed to update subscription.".to_string(),
+            )),
+        }
+    }
+
     pub async fn set_subscription_status(
         &self,
         user_id: &str,
@@ -532,9 +599,7 @@ impl Database {
                     Ok(false)
                 }
             }
-            None => Err(ApiError::InternalServerError(
-                "No subscription found.".to_string(),
-            )),
+            None => Ok(false),
         }
     }
 

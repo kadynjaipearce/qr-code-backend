@@ -1,5 +1,7 @@
 use crate::database::database::Database;
-use crate::database::models::{format_user_id, PaymentSession, UserSubscription};
+use crate::database::models::{
+    format_user_id, PaymentSession, SubscriptionAction, UpdateRequest, UserSubscription,
+};
 use crate::errors::{ApiError, ApiResponse, Response};
 use crate::payment::models::PaymentRequest;
 use crate::routes::guard::Claims;
@@ -9,14 +11,14 @@ use rocket::data::{FromData, ToByteUnit};
 use rocket::http::Status;
 use rocket::outcome::Outcome;
 use rocket::request::FromRequest;
-use rocket::serde::{json::Json, json::Value};
+use rocket::serde::json::Json;
 use rocket::State;
-use rocket::{delete, get, post, put};
+use rocket::{delete, post, put};
 use serde_json::json;
 use std::str::FromStr;
 use stripe::{
     CheckoutSession, CreateCheckoutSession, CreateCustomer, Customer, EventObject, EventType,
-    Object, Webhook,
+    Object, Webhook
 };
 use stripe::{Client, Subscription, SubscriptionId};
 
@@ -42,6 +44,12 @@ pub async fn create_checkout_session(
 
     if user_id != format_user_id(token.sub) {
         return Err(ApiError::Unauthorized);
+    }
+
+    // check if user has a valid subscription.
+
+    if db.validate_subscription_status(&user_id).await? {
+        return Err(ApiError::BadRequest);
     }
 
     let user = match db.select_user(&user_id).await? {
@@ -71,8 +79,8 @@ pub async fn create_checkout_session(
     let session = CheckoutSession::create(
         &stripe,
         CreateCheckoutSession {
-            cancel_url: Some("http://localhost:4200/cancel"),
-            success_url: Some("http://localhost:4200/success"),
+            cancel_url: Some(&secrets.get("STRIPE_CANCEL_URL")),
+            success_url: Some(&secrets.get("STRIPE_SUCCESS_URL")),
             customer: Some(customer.id),
             client_reference_id: Some(&payment.tier.to_string()),
             mode: Some(stripe::CheckoutSessionMode::Subscription),
@@ -108,6 +116,125 @@ pub async fn create_checkout_session(
     }))
 }
 
+#[put("/subscription/<user_id>", format = "json", data = "<update_request>")]
+pub async fn update_subscription(
+    token: Claims,
+    update_request: Json<UpdateRequest>,
+    db: &State<Database>,
+    user_id: &str,
+    stripe: &State<Client>,
+    secrets: &State<Environments>
+) -> Response<Json<ApiResponse>> {
+    /*
+        Updates a subscription for a user.
+
+        Params:
+            subscription: subscription object containing the subscription details.
+
+        Returns:
+            Response<Value>: the updated subscription object in a json response.
+
+    */
+
+    if user_id != format_user_id(token.sub) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let subscription_id = match db.get_subscription_id(&user_id).await? {
+        Some(id) => id,
+        None => return Err(ApiError::NotFound),
+    };
+
+    match update_request.action {
+        SubscriptionAction::Cancel => {
+            let cancelled = Subscription::update(
+                &stripe,
+                &SubscriptionId::from_str(&subscription_id).unwrap(),
+                stripe::UpdateSubscription {
+                    cancel_at_period_end: Some(true),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+            return Ok(Json(ApiResponse {
+                status: Status::Ok.code,
+                message: "Subscription cancelled. ".to_string(),
+                data: json!({"cancelled": cancelled}),
+            }));
+        }
+
+        SubscriptionAction::Upgrade => {
+            let sub_item = stripe::Subscription::retrieve(&stripe, &SubscriptionId::from_str(&subscription_id).unwrap(), &[]).await?.items.data[0].id.clone();
+
+            let upgraded = Subscription::update(
+                &stripe,
+                &SubscriptionId::from_str(&subscription_id).unwrap(),
+                stripe::UpdateSubscription {
+                    items: Some(vec![stripe::UpdateSubscriptionItems {
+                        id: Some(stripe::SubscriptionItemId::from_str(&sub_item).unwrap().to_string()),
+                        price: Some(secrets.get("STRIPE_PRODUCT_PRO")),
+                        quantity: Some(1),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                },
+                
+            ).await?;
+
+            return Ok(Json(ApiResponse {
+                status: Status::Ok.code,
+                message: "Subscription cancelled. ".to_string(),
+                data: json!({"upgraded": upgraded}),
+            }));
+  
+        }
+
+        SubscriptionAction::Downgrade => {
+            let sub_item = stripe::Subscription::retrieve(&stripe, &SubscriptionId::from_str(&subscription_id).unwrap(), &[]).await?.items.data[0].id.clone();
+
+            let downgraded = Subscription::update(
+                &stripe,
+                &SubscriptionId::from_str(&subscription_id).unwrap(),
+                stripe::UpdateSubscription {
+                    items: Some(vec![stripe::UpdateSubscriptionItems {
+                        id: Some(stripe::SubscriptionItemId::from_str(&sub_item).unwrap().to_string()),
+                        price: Some(secrets.get("STRIPE_PRODUCT_LITE")),
+                        quantity: Some(1),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                },
+                
+            ).await?;
+
+            return Ok(Json(ApiResponse {
+                status: Status::Ok.code,
+                message: "Subscription cancelled. ".to_string(),
+                data: json!({"downgraded": downgraded}),
+            }));
+        }
+
+        SubscriptionAction::Resume => {
+            let resumed = Subscription::update(
+                &stripe,
+                &SubscriptionId::from_str(&subscription_id).unwrap(),
+                stripe::UpdateSubscription {
+                    cancel_at_period_end: Some(false),
+                    ..Default::default()
+                },
+            )
+            .await?;
+
+            return Ok(Json(ApiResponse {
+                status: Status::Ok.code,
+                message: "Subscription cancelled. ".to_string(),
+                data: json!({"resumed": resumed}),
+            }));
+        }
+    }
+}
+
 #[delete("/subscription/<user_id>", format = "json")]
 pub async fn cancel_subscription(
     token: Claims,
@@ -130,7 +257,7 @@ pub async fn cancel_subscription(
         return Err(ApiError::Unauthorized);
     }
 
-    let subscription_id = match db.lookup_subscription_id(&user_id).await? {
+    let subscription_id = match db.get_subscription_id(&user_id).await? {
         Some(id) => id,
         None => return Err(ApiError::NotFound),
     };
@@ -180,7 +307,7 @@ pub async fn stripe_webhook(
         match event.type_ {
             EventType::CheckoutSessionCompleted => {
                 if let EventObject::CheckoutSession(session) = event.data.object {
-                    let user = db.lookup_user_from_session(&session.id).await?;
+                    let user = db.get_user_from_session(&session.id).await?;
 
                     let _subscription = match &session.subscription {
                         Some(sub) => {
@@ -194,6 +321,8 @@ pub async fn stripe_webhook(
                                     },
                                 )
                                 .await?;
+
+                            dbg!(&user.id.key().to_string());
 
                             return Ok(Json(ApiResponse {
                                 status: Status::Ok.code,
@@ -210,34 +339,23 @@ pub async fn stripe_webhook(
                 }
             }
 
-            EventType::CustomerSubscriptionPaused => {
+            EventType::CustomerSubscriptionUpdated => {
                 if let EventObject::Subscription(subscription) = event.data.object {
-                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
+                    dbg!(&subscription);
+                    let user = db.get_user_from_subscription(&subscription.id).await?;
 
-                    db.set_subscription_status(&user.id.key().to_string(), "paused")
-                        .await?;
+                    let tier = match &subscription.items.data[0].price.clone().unwrap().id.as_ref() {
+                        id if id == &secrets.get("STRIPE_PRODUCT_PRO") => "Pro".to_string(),
+                        id if id == &secrets.get("STRIPE_PRODUCT_LITE") => "Lite".to_string(),
+                        _ => return Err(ApiError::BadRequest),
+                    };
+
+                    let updated = db.override_subscription(&user.id.key().to_string(), &subscription.id.to_string(), &tier).await?;
 
                     return Ok(Json(ApiResponse {
                         status: Status::Ok.code,
-                        message: "Subscription deleted. ".to_string(),
-                        data: json!({"paused": subscription.id().to_string()}),
-                    }));
-                } else {
-                    return Err(ApiError::BadRequest);
-                }
-            }
-
-            EventType::CustomerSubscriptionResumed => {
-                if let EventObject::Subscription(subscription) = event.data.object {
-                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
-
-                    db.set_subscription_status(&user.id.key().to_string(), "active")
-                        .await?;
-
-                    return Ok(Json(ApiResponse {
-                        status: Status::Ok.code,
-                        message: "Subscription deleted. ".to_string(),
-                        data: json!({"resumed": subscription.id().to_string()}),
+                        message: "Subscription updated. ".to_string(),
+                        data: json!({"updated": updated}),
                     }));
                 } else {
                     return Err(ApiError::BadRequest);
@@ -246,10 +364,9 @@ pub async fn stripe_webhook(
 
             EventType::CustomerSubscriptionDeleted => {
                 if let EventObject::Subscription(subscription) = event.data.object {
-                    let user = db.lookup_user_from_subscription(&subscription.id).await?;
+                    let user = db.get_user_from_subscription(&subscription.id).await?;
 
-                    db.set_subscription_status(&user.id.key().to_string(), "deleted")
-                        .await?;
+                    let _ = db.delete_user_data(&user.id.key().to_string()).await?;
 
                     return Ok(Json(ApiResponse {
                         status: Status::Ok.code,
@@ -269,7 +386,9 @@ pub async fn stripe_webhook(
             }
         }
     } else {
-        panic!("Error verifying stripe signature. ");
+        return Err(ApiError::InternalServerError(
+            "Stripe signature invalid. ".to_string(),
+        ));
     }
 }
 
