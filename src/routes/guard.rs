@@ -34,11 +34,3 @@ impl<'r> FromRequest<'r> for Claims {
         }
     }
 }
-
-impl Claims {
-    pub fn has_permissions(&self, required_perms: &[&str]) -> bool {
-        required_perms
-            .iter()
-            .all(|perm| self.permissions.contains(&perm.to_string()))
-    }
-}

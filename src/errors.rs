@@ -5,7 +5,14 @@ use rocket::{
     serde::json::Json,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiResponse {
+    pub status: u16,
+    pub message: String,
+    pub data: Value,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ApiError {
@@ -29,6 +36,24 @@ impl From<surrealdb::Error> for ApiError {
     }
 }
 
+impl From<serde_json::Error> for ApiError {
+    fn from(value: serde_json::Error) -> Self {
+        ApiError::InternalServerError(value.to_string())
+    }
+}
+
+impl From<jsonwebtoken::errors::Error> for ApiError {
+    fn from(value: jsonwebtoken::errors::Error) -> Self {
+        ApiError::InternalServerError(value.to_string())
+    }
+}
+
+impl From<base64::DecodeError> for ApiError {
+    fn from(value: base64::DecodeError) -> Self {
+        ApiError::InternalServerError(value.to_string())
+    }
+}
+
 impl From<reqwest::Error> for ApiError {
     fn from(value: reqwest::Error) -> Self {
         ApiError::InternalServerError(value.to_string())
@@ -42,7 +67,7 @@ impl fmt::Display for ApiError {
             ApiError::NotFound => write!(f, "Not Found"),
             ApiError::Unauthorized => write!(f, "Unauthorized"),
             ApiError::InternalServerError(ref message) => {
-                write!(f, "Internal Server Error: {}", message)
+                write!(f, "Internal Server Error: {:?}", message)
             }
         }
     }
@@ -56,6 +81,15 @@ impl<'r> Responder<'r, 'static> for ApiError {
             ApiError::Unauthorized => Status::Unauthorized,
             _ => Status::InternalServerError,
         };
+
+        dbg!(
+            "Error: {:?}\nStatus: {}\nMethod: {}\nURI: {}\nHeaders: {:?}",
+            &self,
+            status,
+            request.method(),
+            request.uri(),
+            request.headers()
+        );
 
         status::Custom(
             status,

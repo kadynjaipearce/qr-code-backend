@@ -26,8 +26,7 @@ impl Environments {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct Jwk {
-    alg: String,
+pub struct Jwk {
     kty: String,
     kid: String,
     n: String,
@@ -111,9 +110,7 @@ pub async fn decode_jwt(token: &str, secrets: &Environments) -> Response<Claims>
     validation.validate_exp = true;
     validation.set_audience(&[audience]);
 
-    let decoded: TokenData<Claims> = decode(token, &decoding_key, &validation)
-        .map_err(|err| format!("Failed to decode token: {:?}", err))
-        .unwrap();
+    let decoded: TokenData<Claims> = decode(token, &decoding_key, &validation)?;
 
     Ok(decoded.claims)
 }
