@@ -593,7 +593,7 @@ impl Database {
 
         match result.take::<Option<models::SubscriptionStatus>>(0)? {
             Some(status) => {
-                if status.subscription_status == "active" || status.subscription_status == "complete" {
+                if status.subscription_status == "complete" {
                     Ok(true)
                 } else {
                     Ok(false)
