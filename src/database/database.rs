@@ -534,7 +534,7 @@ impl Database {
             .bind(("subscription_id", subscription_id.to_string() ))
             .await?;
 
-        match result.take::<Option<models::UserSubscriptionResult>>(0)? {
+        match result.take::<Option<models::UserSubscriptionResult>>(2)? {
             Some(updated) => Ok(updated),
             None => Err(ApiError::InternalServerError(
                 "Failed to update subscription.".to_string(),
