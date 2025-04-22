@@ -18,3 +18,4 @@ serde_json = "1.0.133"
 surrealdb = "2.1.4"
 thiserror = "2.0.4"
 async-stripe = { version = "0.39.1", features = ["runtime-tokio-hyper"] }
+cargo-show-asm = "0.2.48"

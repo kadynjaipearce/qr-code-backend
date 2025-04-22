@@ -326,21 +326,20 @@ impl Database {
 
         let _ = self
             .db
-            .query("
+            .query(
+                "
                     LET $user = type::thing('user', $user_id);
             
                     DELETE $user->subscribed->subscription;
-                    DELETE $user->created->dynamic_url;")
+                    DELETE $user->created->dynamic_url;",
+            )
             .bind(("user_id", user_id.to_string()))
             .await?;
 
         Ok(true)
     }
 
-    pub async fn get_user_from_subscription(
-        &self,
-        subscription_id: &str,
-    ) -> Response<UserResult> {
+    pub async fn get_user_from_subscription(&self, subscription_id: &str) -> Response<UserResult> {
         /*
             Looks up a user's Auth0 ID from a subscription ID in the database.
 
